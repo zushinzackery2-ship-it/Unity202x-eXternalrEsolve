@@ -23,6 +23,10 @@
 
 ---
 
+> [!NOTE]
+> **版本兼容性说明**  
+> 本项目的结构与算法主要基于 Unity 2020~2022 版本进行逆向还原；Unity 版本过老时，部分结构偏移/算法可能无法完全兼容。
+
 ## 访问器
 
 - **全局上下文**：通过 `SetGlobalMemoryAccessor` / `SetGOMGlobal` / `SetDefaultRuntime` 一次性设置，后续所有 API 直接调用、直接返回结果，无需反复传参。
@@ -42,9 +46,10 @@
 | **Mono / IL2CPP** | 自动适配两种运行时的内存结构 |
 
 > [!IMPORTANT]
-> **需要手动传入 GameObjectManager 偏移**  
-> GameObjectManager 全局指针偏移因游戏/Unity版本不同而异，需自行逆向查找。  
-> 格式：`UnityPlayer.dll + 偏移`，例如 `unityPlayerBase + 0x1AE8C50`
+> **GameObjectManager 偏移（可手动也可盲扫）**  
+> GameObjectManager 全局指针偏移因游戏/Unity版本不同而异。  
+> 该偏移指向 `gomGlobal`（全局指针槽地址）：`gomGlobal = unityPlayerBase + offset`。  
+> 除手动逆向外，也可以在运行时盲扫 `UnityPlayer.dll` 的 `.data/.rdata` 指针槽自动定位（见 `FindGOMGlobalByScan` / `ResolveAndSetGOMGlobalByScan`）。
 
 ---
 
@@ -157,7 +162,8 @@ External/
 │   │   ├── IL2CPP内存结构.txt
 │   │   └── MONO内存结构.txt
 │   └── Algorithm/
-│       ├── GOM遍历算法.txt
+│       ├── GOM定位算法.txt
+│       ├── GOM解析算法.txt
 │       ├── Metadata检索与导出算法.txt
 │       ├── TagHash掩码算法.txt
 │       ├── Tag查找算法.txt
@@ -187,16 +193,20 @@ int main()
     UnityExternal::WinAPIMemoryAccessor accessor(hProcess);
     UnityExternal::SetGlobalMemoryAccessor(&accessor);
 
-    // 3. 写入 GameObjectManager 全局地址和默认运行时
+    // 3. 写入 gomGlobal 指针槽地址和默认运行时
     std::uintptr_t unityPlayerBase = UnityExternal::FindModuleBase(pid, L"UnityPlayer.dll");
-    if (!unityPlayerBase) {
+    if (!unityPlayerBase)
+    {
         std::cerr << "Failed to find UnityPlayer.dll" << std::endl;
         CloseHandle(hProcess);
         return 1;
     }
     
-    std::uintptr_t gomGlobal = unityPlayerBase + GOM_OFFSET;  // 需自行查找偏移
-    UnityExternal::SetGOMGlobal(gomGlobal);
+    if (!UnityExternal::ResolveAndSetGOMGlobalByScan(unityPlayerBase))
+    {
+        std::uintptr_t gomGlobal = unityPlayerBase + GOM_OFFSET;  // 手动偏移（兜底）
+        UnityExternal::SetGOMGlobal(gomGlobal);
+    }
     UnityExternal::SetDefaultRuntime(UnityExternal::RuntimeKind::Mono);
     // 或 RuntimeKind::Il2Cpp（根据目标游戏选择）
 
@@ -269,7 +279,10 @@ UnityExternal::SetGlobalMemoryAccessor(&accessor);
 
 ### Q: 如何找到 GameObjectManager 全局指针偏移？
 
-**A:** 使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 函数来定位 GameObjectManager 全局指针。
+**A:**
+
+- **手动逆向**：使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 等路径来定位。
+- **运行时盲扫**：使用 `FindGOMGlobalByScan()` / `FindUnityPlayerGOMGlobalOffsetByScan()` 
 
 ### Q: 支持多进程同时读取吗？
 
@@ -278,14 +291,6 @@ UnityExternal::SetGlobalMemoryAccessor(&accessor);
 ### Q: 是否支持多线程访问？
 
 **A:** 支持，但内存访问本身是串行的（基于 `ReadProcessMemory`）。建议使用线程池模式进行批量查询。
-
----
-
-## 关键偏移
-
-### GameObjectManager 全局指针
-
-需要在 `UnityPlayer.dll` 中查找 GameObjectManager 全局指针偏移，不同游戏/版本偏移不同。
 
 ---
 
