@@ -1,0 +1,52 @@
+Metadata Export Algorithm
+
+1. Purpose
+    Export IL2CPP global-metadata bytes from a target process/module.
+    API returns a std::vector<uint8_t> (caller decides how to write to disk).
+
+2. Global configuration
+    a. Set global memory accessor
+       - SetGlobalMemoryAccessor(&accessor)
+
+    b. Set target module
+       - SetMetadataTargetModule(moduleBase)
+       or
+       - SetMetadataTarget(pid, moduleName)
+         (moduleName default is GameAssembly.dll)
+
+    c. Optional: set version for version-based export
+       - SetMetadataTargetVersion(version)
+
+3. Export APIs
+    - ExportMetadataTScore()
+      - requiredVersion = 0
+      - scanning uses scoring only
+
+    - ExportMetadataTVersion()
+      - requiredVersion = GetMetadataTargetVersion()
+      - if version==0, returns empty vector
+
+4. Algorithm
+    a. Read PE sections
+       - ReadModuleSections(moduleBase)
+       - sizeOfImage = OptionalHeader.SizeOfImage
+       - if failed: fallback sizeOfImage = 0x2000000
+
+    b. Find metadata base
+       - FindMetadataPointerByScore(moduleBase, sizeOfImage, requiredVersion)
+       - output: FoundMeta{metaBase, maxEnd, score}
+
+    c. Compute total size
+       - CalcTotalSizeFromHeader(metaBase)
+       - totalSize = max(offset+size) across all header pairs
+
+    d. Read region
+       - ReadMetadataRegion(metaBase, totalSize)
+       - return bytes vector
+
+5. Failure behavior
+    - Any failure returns an empty vector.
+
+6. Implementation location
+    - External/Metadata/MetadataExport.hpp
+    - Global state: External/Metadata/MetadataConfig.hpp

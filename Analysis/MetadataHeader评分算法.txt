@@ -1,0 +1,65 @@
+Metadata Header Scoring Algorithm
+
+1. Purpose
+Given a candidate address that may point to IL2CPP global-metadata header,
+validate basic structure consistency and compute a score.
+The best score is selected as the metadata base.
+
+2. Key idea
+The IL2CPP metadata header contains many (offset,size) pairs. A valid header
+should satisfy:
+- offsets are aligned
+- sizes are non-zero for a set of required tables
+- computed maxEnd is reasonable
+
+3. Inputs
+- buf: a local 0x1000 page buffer
+- off: candidate offset inside the page (must be 4-byte aligned)
+- strictVersion: when enabled and requiredVersion==0, require version in [10,100]
+- requiredVersion: if non-zero, version must equal requiredVersion
+
+4. Outputs
+- score: int
+- maxEnd: uint32_t (max(offset+size) across all pairs)
+
+5. Checks
+1. Alignment and bounds
+   - off % 4 == 0
+   - off + 0x120 <= pageSize
+
+2. Version
+   - version = *(u32)(buf + off + 0x04)
+   - if requiredVersion!=0: version must equal requiredVersion
+   - else if strictVersion: version must be in [10,100]
+
+3. Basic required tables
+   - stringOffset/stringSize at (0x08,0x0C)
+   - imagesOffset/imagesSize at (0xA8,0xAC) and imagesSize % 0x28 == 0
+   - assembliesOffset/assembliesSize at (0xB0,0xB4) and assembliesSize % 0x40 == 0
+
+4. Generic pairs validation
+   For each pair (o,s) in a fixed list of offsets:
+   - if s==0: skip
+   - else o!=0, o%4==0, o>=0x100
+   - Track maxEnd = max(maxEnd, o+s)
+   - Count nonzero pairs
+
+5. Range constraints
+   - nonzeroPairs >= 6
+   - maxEnd in [0x20000, 0x40000000]
+   - string/images/assemblies end must be <= maxEnd
+
+6. Score formula (heuristic)
+score = nonzeroPairs*100000
+      + (maxEnd/0x1000)
+      + (min(stringSize,0x40000000)/0x1000)
+      + min(imagesCount,200000)
+      + min(assembliesCount,200000)
+
+7. Total size computation
+After a header is selected, total metadata size is computed by re-reading
+all (offset,size) pairs from remote memory:
+  totalSize = max(offset+size)
+
+8. Implementation location
+- External/Metadata/MetadataHeader.hpp

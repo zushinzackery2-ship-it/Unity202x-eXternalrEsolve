@@ -1,0 +1,55 @@
+GOM Traversal and Tag Search
+============================
+
+Purpose
+-------
+遍历 GameObjectManager 中的所有 GameObject，支持按 Tag 快速查找。
+GOM 使用哈希桶结构存储，每个桶包含一个环形链表。
+
+Data Structure
+--------------
+GOMGlobal = UnityPlayer.dll + offset -> GameObjectManager*
+
+GameObjectManager:
+  +0x00  buckets      // 桶数组指针
+  +0x08  bucketCount  // 桶数量 (int32)
+
+Bucket (stride = 24 bytes):
+  +0x00  hashMask     // 哈希掩码
+  +0x04  info         // 4字节信息
+  +0x08  key          // 键值
+  +0x10  listHead     // 链表头指针
+
+Node (circular linked list):
+  +0x00  pLast        // 前一节点
+  +0x08  pNext        // 后一节点
+  +0x10  nativeObject // 原生 GameObject 指针
+
+Bucket Filter (GetAllLinkedBuckets)
+-----------------------------------
+GOM 桶不全是 GameObject，需要过滤:
+1. 遍历所有桶 [0, bucketCount)
+2. 读取 listHead = *(bucket + 0x10)
+3. 取首节点 native = *(*(listHead + 0x8) + 0x10)
+4. 通过 managed 对象读取类型名
+5. 仅保留 typeName == "GameObject" 的桶
+
+Enumerate GameObjects
+---------------------
+对每个有效桶:
+1. 从 listHead + 0x8 取首节点
+2. 按 next 指针遍历环形链表 (直到回到 listHead)
+3. 收集 (node, nativeObject, managedObject)
+
+Find by Tag
+-----------
+在枚举基础上增加 Tag 匹配:
+  tag = *(native + 0x54) & 0xFFFF  // 低 16 位为有效 Tag
+  匹配则立即返回
+
+FindMainCamera Flow
+-------------------
+1. FindGameObjectThroughTag(5)     // Tag=5 是 Unity 主相机约定
+2. GetComponentThroughTypeName(go, "Camera")
+3. IsComponentEnabled(camera)      // 检查组件启用
+4. 返回 Camera 原生指针

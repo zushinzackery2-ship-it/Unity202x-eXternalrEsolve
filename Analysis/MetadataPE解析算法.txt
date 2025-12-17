@@ -1,0 +1,44 @@
+Metadata PE Parse Algorithm
+
+1. Purpose:
+    Parse PE headers from a remote module base address and enumerate its sections.
+    The result is used to limit scanning to meaningful sections (e.g. .data/.rdata).
+
+2. Inputs:
+    - moduleBase: remote module base (e.g. GameAssembly.dll base)
+    - mem: IMemoryAccessor (ReadProcessMemory or driver)
+
+3. Outputs:
+    - sizeOfImage: OptionalHeader.SizeOfImage
+    - sections[]: list of { name[9], rva, size }
+
+4. Procedure:
+  a. Read IMAGE_DOS_HEADER at moduleBase
+    - Validate e_magic == 'MZ'
+    - Validate e_lfanew in a sane range (0..0x2000)
+
+  b. Read IMAGE_NT_HEADERS64 at moduleBase + e_lfanew
+    - Validate Signature == 'PE\0\0'
+    - Validate OptionalHeader.Magic is PE32 or PE32+
+    - Read OptionalHeader.SizeOfImage
+
+  c. Locate section table
+    sectionTable = moduleBase + e_lfanew + 4 + sizeof(IMAGE_FILE_HEADER) + SizeOfOptionalHeader
+
+  d. Iterate IMAGE_SECTION_HEADER entries
+    - Copy Name[8] into a null-terminated name[9]
+    - rva  = VirtualAddress
+    - size = Misc.VirtualSize (fallback to SizeOfRawData if 0)
+
+5. Filtering in scanner
+    The scanner will further filter sections by name:
+    - .data
+    - .rdata
+    - .pdata
+    - .tls
+    - .reloc
+
+6. Notes:
+    - If PE parsing fails, the scanner falls back to scanning a conservative range
+      (moduleSize or a fixed cap, depending on call site).
+    - Implementation location: External/Metadata/MetadataPEParser.hpp
