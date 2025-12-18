@@ -16,7 +16,8 @@ struct WinAPIMemoryAccessor : IMemoryAccessor
     explicit WinAPIMemoryAccessor(HANDLE hProcess = GetCurrentProcess())
         : process(hProcess) {}
 
-    bool Read(std::uintptr_t address, void* buffer, std::size_t size) const override {
+    bool Read(std::uintptr_t address, void* buffer, std::size_t size) const override
+    {
         if (!process || !buffer || size == 0)
         {
             return false;
@@ -35,7 +36,8 @@ struct WinAPIMemoryAccessor : IMemoryAccessor
         return bytesRead == size;
     }
 
-    bool Write(std::uintptr_t address, const void* buffer, std::size_t size) const override {
+    bool Write(std::uintptr_t address, const void* buffer, std::size_t size) const override
+    {
         if (!process || !buffer || size == 0)
         {
             return false;
