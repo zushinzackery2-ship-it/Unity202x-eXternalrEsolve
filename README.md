@@ -63,13 +63,11 @@
 
 ## 依赖安装
 
-需要手动添加 [GLM 库](https://github.com/g-truc/glm)：
+ 需要手动添加 [GLM 库](https://github.com/g-truc/glm)：
 
 ```bash
 git clone https://github.com/g-truc/glm.git
 ```
-
-## 目录结构
 
 <details>
 <summary><strong>目录结构</strong></summary>
