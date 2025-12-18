@@ -77,7 +77,7 @@ inline std::uintptr_t GetComponentSlotNative(std::uintptr_t pool, int index)
 // Component enabled state (+0x38)
 inline bool GetComponentEnabled(const IMemoryAccessor& mem, std::uintptr_t nativeComponent, bool& outEnabled)
 {
-    outEnabled = true;
+    outEnabled = false;
     if (!nativeComponent) return false;
     std::uint8_t val = 0;
     if (!mem.Read(nativeComponent + 0x38u, &val, 1)) return false;
@@ -89,8 +89,8 @@ inline bool GetComponentEnabled(std::uintptr_t nativeComponent)
 {
     const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
     if (!acc || !nativeComponent) return false;
-    bool enabled = true;
-    GetComponentEnabled(*acc, nativeComponent, enabled);
+    bool enabled = false;
+    if (!GetComponentEnabled(*acc, nativeComponent, enabled)) return false;
     return enabled;
 }
 

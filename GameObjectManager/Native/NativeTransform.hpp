@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <cstdint>
+#include <unordered_set>
 #include <immintrin.h>
 
 #include "../../Core/UnityExternalMemory.hpp"
@@ -59,6 +60,8 @@ struct NativeTransform
 
     // Read hierarchy state for position calculation
     bool ReadHierarchyState(TransformHierarchyState& outState, std::int32_t& outIndex) const {
+        outState = TransformHierarchyState{};
+        outIndex = 0;
         if (!address) return false;
 
         std::uintptr_t statePtr = 0;
@@ -91,19 +94,24 @@ struct NativeTransform
     }
 
     // Get world position
-    bool GetWorldPosition(Vector3f& outPos, int maxDepth = 256) const;
+    bool GetWorldPosition(Vector3f& outPos, int maxDepth = -1) const;
 };
 
 // Compute world position from hierarchy state (SSE optimized)
 inline bool ComputeWorldPositionFromHierarchy(const TransformHierarchyState& state,
                                               std::int32_t index,
                                               Vector3f& outPos,
-                                              int maxDepth = 256)
-                                              {
+                                              int maxDepth = -1)
+{
     const IMemoryAccessor* mem = GetGlobalMemoryAccessor();
     if (!mem) return false;
 
-    if (!state.nodeData || !state.parentIndices || index < 0 || maxDepth <= 0)
+    if (!state.nodeData || !state.parentIndices || index < 0)
+    {
+        return false;
+    }
+
+    if (maxDepth == 0)
     {
         return false;
     }
@@ -125,8 +133,20 @@ inline bool ComputeWorldPositionFromHierarchy(const TransformHierarchyState& sta
     }
 
     int depth = 0;
-    while (parent >= 0 && depth < maxDepth)
+    std::unordered_set<std::int32_t> visited;
+    while (parent >= 0)
     {
+        if (maxDepth > 0 && depth >= maxDepth)
+        {
+            return false;
+        }
+
+        if (visited.find(parent) != visited.end())
+        {
+            return false;
+        }
+        visited.insert(parent);
+
         float node[12] = {};
         std::uintptr_t nodeAddr = state.nodeData + static_cast<std::uintptr_t>(parent) * 48u;
         if (!mem->Read(nodeAddr, node, sizeof(node)))
@@ -207,7 +227,7 @@ inline bool NativeTransform::GetWorldPosition(Vector3f& outPos, int maxDepth) co
 inline bool ReadTransformHierarchyState(std::uintptr_t transformAddress,
                                         TransformHierarchyState& outState,
                                         std::int32_t& outIndex)
-                                        {
+{
     NativeTransform t(transformAddress);
     return t.ReadHierarchyState(outState, outIndex);
 }
@@ -215,8 +235,8 @@ inline bool ReadTransformHierarchyState(std::uintptr_t transformAddress,
 // Helper: Get world position from transform address
 inline bool GetTransformWorldPosition(std::uintptr_t transformAddress,
                                       Vector3f& outPos,
-                                      int maxDepth = 256)
-                                      {
+                                      int maxDepth = -1)
+{
     NativeTransform t(transformAddress);
     return t.GetWorldPosition(outPos, maxDepth);
 }
@@ -226,6 +246,7 @@ inline bool FindTransformOnGameObject(RuntimeKind runtime,
                                       std::uintptr_t gameObjectNative,
                                       std::uintptr_t& outTransformNative)
 {
+    outTransformNative = 0;
     const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
     if (!acc || !gameObjectNative) return false;
 

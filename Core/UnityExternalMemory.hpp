@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <string>
+#include <vector>
 
 namespace UnityExternal
 {
@@ -20,18 +21,24 @@ public:
 template <typename T>
 inline bool ReadValue(const IMemoryAccessor& mem, std::uintptr_t address, T& out)
 {
+    out = T{};
+    if (!address) return false;
     return mem.Read(address, &out, sizeof(T));
 }
 
 // Read a pointer from memory
 inline bool ReadPtr(const IMemoryAccessor& mem, std::uintptr_t address, std::uintptr_t& out)
 {
+    out = 0;
+    if (!address) return false;
     return ReadValue(mem, address, out);
 }
 
 // Read a 32-bit integer from memory
 inline bool ReadInt32(const IMemoryAccessor& mem, std::uintptr_t address, std::int32_t& out)
 {
+    out = 0;
+    if (!address) return false;
     return ReadValue(mem, address, out);
 }
 
@@ -44,15 +51,30 @@ inline bool ReadCString(const IMemoryAccessor& mem, std::uintptr_t address, std:
         return false;
     }
 
-    char buffer[257] = {};
-    std::size_t readLen = (maxLen < 256) ? maxLen : 256;
-    if (!mem.Read(address, buffer, readLen))
+    if (maxLen == 0)
+    {
+        return false;
+    }
+
+    std::size_t readLen = maxLen;
+    if (readLen > 4096) readLen = 4096;
+
+    std::vector<char> buffer;
+    buffer.resize(readLen + 1);
+
+    if (!mem.Read(address, buffer.data(), readLen))
     {
         return false;
     }
 
     buffer[readLen] = '\0';
-    out = buffer;
+    std::size_t n = 0;
+    for (; n < readLen; ++n)
+    {
+        if (buffer[n] == '\0') break;
+    }
+
+    out.assign(buffer.data(), n);
     return true;
 }
 

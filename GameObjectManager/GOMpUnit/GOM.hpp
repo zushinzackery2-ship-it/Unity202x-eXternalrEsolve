@@ -8,6 +8,7 @@
 #include "ListNode/ListNode.hpp"
 #include "Pool/Pool.hpp"
 #include "Managed/Managed.hpp"
+#include "Scan/GOMScan.hpp"
 #include "Walker/WalkerTypes.hpp"
 #include "Walker/GOMWalker.hpp"
 #include "Walker/WalkerImpl.hpp"

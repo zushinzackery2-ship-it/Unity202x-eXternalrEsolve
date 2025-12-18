@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 #include <cstdint>
 #include <cstddef>
@@ -30,7 +28,7 @@ struct WinAPIMemoryAccessor : IMemoryAccessor
                                buffer,
                                static_cast<SIZE_T>(size),
                                &bytesRead))
-                               {
+        {
             return false;
         }
 
@@ -49,7 +47,7 @@ struct WinAPIMemoryAccessor : IMemoryAccessor
                                 buffer,
                                 static_cast<SIZE_T>(size),
                                 &bytesWritten))
-                                {
+        {
             return false;
         }
 
@@ -58,5 +56,3 @@ struct WinAPIMemoryAccessor : IMemoryAccessor
 };
 
 } // namespace UnityExternal
-
-#endif

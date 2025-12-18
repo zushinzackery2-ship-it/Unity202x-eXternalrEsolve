@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 #include <cstring>
 #include <cwchar>
@@ -81,6 +79,11 @@ inline bool CrAtcherReadMemory(HANDLE hDriver, DWORD pid, std::uint64_t address,
         return false;
     }
 
+    if (size > 0xFFFFFFFFu)
+    {
+        return false;
+    }
+
     CrAtcherDriverInput in{};
     in.flag = 0;
     in.pid = static_cast<std::uint32_t>(pid);
@@ -109,6 +112,16 @@ inline bool CrAtcherReadMemory(HANDLE hDriver, DWORD pid, std::uint64_t address,
 inline bool CrAtcherWriteMemory(HANDLE hDriver, DWORD pid, std::uint64_t address, const void* buffer, std::size_t size)
 {
     if (!hDriver || !pid || !address || !buffer || size == 0)
+    {
+        return false;
+    }
+
+    if (size > 0xFFFFFFFFu)
+    {
+        return false;
+    }
+
+    if (size > (0xFFFFFFFFu - (std::uint32_t)sizeof(CrAtcherDriverInput)))
     {
         return false;
     }
@@ -185,6 +198,16 @@ inline std::uint64_t CrAtcherGetModule(HANDLE hDriver, DWORD pid, const wchar_t*
     if (moduleName && moduleName[0] != L'\0')
     {
         const std::size_t nameBytes = (wcslen(moduleName) + 1) * sizeof(wchar_t);
+        if (nameBytes > 0xFFFFFFFFu)
+        {
+            return 0;
+        }
+
+        if (nameBytes > (0xFFFFFFFFu - (std::uint32_t)sizeof(CrAtcherDriverInput)))
+        {
+            return 0;
+        }
+
         payload.resize(sizeof(in) + nameBytes);
         memcpy(payload.data(), &in, sizeof(in));
         memcpy(payload.data() + sizeof(in), moduleName, nameBytes);
@@ -229,7 +252,21 @@ inline bool CrAtcherReadBatch(
         return false;
     }
 
+    if (outBufferSize > 0xFFFFFFFFu)
+    {
+        return false;
+    }
+
+    if (count > 0x100000u)
+    {
+        return false;
+    }
+
     const std::size_t inSize = sizeof(RMCR3_READ_BATCH) + (static_cast<std::size_t>(count) - 1) * sizeof(RMCR3_READ_DESC);
+    if (inSize > 0xFFFFFFFFu)
+    {
+        return false;
+    }
     std::vector<std::uint8_t> inBuf;
     inBuf.resize(inSize);
 
@@ -292,5 +329,3 @@ struct DriverMemoryAccessor final : IMemoryAccessor
 };
 
 } // namespace UnityExternal
-
-#endif

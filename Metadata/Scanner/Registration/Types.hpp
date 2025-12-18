@@ -1,9 +1,9 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <cstdint>
 #include <cstring>
+#include <string>
+#include <vector>
 
 namespace UnityExternal
 {
@@ -164,5 +164,3 @@ inline MetaRegOffsets GetMetadataRegistrationOffsets(std::uint32_t version)
 }
 
 }
-
-#endif

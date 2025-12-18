@@ -9,6 +9,7 @@
 - `ReadValue<T>(mem, addr, out)` / `WriteValue<T>(mem, addr, value)`：模板读写。
 - `ReadPtr(mem, addr, out)` / `ReadInt32(mem, addr, out)` / `ReadCString(mem, addr, out, maxLen)`：基础读取助手。
 - `SetGlobalMemoryAccessor(const IMemoryAccessor*)` / `GetGlobalMemoryAccessor()`：设置/获取全局访问器。
+- `SetTargetPid(uint32_t)` / `GetTargetPid()`：设置/获取目标 PID（供 `FindGOMGlobalByScan` 等使用）。
 - `ReadValueGlobal<T>(addr, out)` / `WriteValueGlobal<T>(addr, value)` / `ReadPtrGlobal(addr, out)` / `ReadInt32Global(addr, out)`：基于全局访问器的便捷读写。
 - `enum class RuntimeKind { Il2Cpp, Mono };`
 - `struct TypeInfo { std::string name; std::string namespaze; };`
@@ -20,12 +21,17 @@
 - `SetProcessIdResolver(resolver)` / `SetModuleBaseResolver(resolver)`：注册自定义解析器。
 - `UseWinAPIResolvers()`：使用内置 WinAPI 解析实现。
 - `FindProcessId(processName)` / `FindModuleBase(pid, moduleName)`：调用当前解析器。
+- `FindProcessIdsByWindowClass(windowClass)` / `FindUnityWndClassPids()`：通过窗口类名枚举 PID（`UnityWndClass`）。
 - `struct WinAPIMemoryAccessor : IMemoryAccessor`：基于 `ReadProcessMemory` 的默认跨进程访问器。
 
 ## GameObjectManager 全局配置
 
-- `SetGOMGlobal(std::uintptr_t)` / `GetGOMGlobal()`：设置/获取 GameObjectManager 全局指针地址。
+- `SetGOMGlobal(std::uintptr_t)` / `GetGOMGlobal()`：设置/获取 `gomGlobal` 指针槽地址（`UnityPlayer.dll + offset`），槽内容为 `GameObjectManager*`。
 - `SetDefaultRuntime(RuntimeKind)` / `GetDefaultRuntime()`：设置/获取默认运行时（Mono/IL2CPP）。
+
+## GameObjectManager 偏移盲扫（UnityPlayer.dll）
+
+- `std::uint64_t FindGOMGlobalByScan()`：使用全局 `IMemoryAccessor` + `TargetPid` 扫描 `UnityPlayer.dll` 并返回 `gomGlobal` 槽 RVA（offset）。
 
 ## GameObjectManager Walker 与枚举
 
@@ -82,7 +88,7 @@
   - `GetManaged(out)` (+0x28)
   - `GetGameObject(out)` (+0x30)
   - `ReadHierarchyState(TransformHierarchyState& state, int32_t& index)`
-  - `GetWorldPosition(Vector3f& outPos, int maxDepth = 256)`：层级累乘计算世界坐标。
+  - `GetWorldPosition(Vector3f& outPos, int maxDepth = -1)`：层级累乘计算世界坐标（默认不限制深度）。
 - 辅助函数：
   - `ComputeWorldPositionFromHierarchy(state, index, outPos, maxDepth)`
   - `ReadTransformHierarchyState(transformAddr, state, index)`
@@ -112,15 +118,15 @@
 
 - 全局配置：
   - `SetMetadataTargetModule(std::uintptr_t moduleBase)` / `GetMetadataTargetModule()`
-  - `SetMetadataTarget(DWORD pid, const wchar_t* moduleName)`：默认模块名 `GameAssembly.dll`
+  - `SetMetadataTarget(DWORD pid, const wchar_t* moduleName)`：要求显式传入 `moduleName`
   - `SetMetadataTargetVersion(uint32_t version)` / `GetMetadataTargetVersion()`
 
 - 导出函数（返回二进制数据，调用者自行写文件）：
   - `ExportMetadataTScore()`：评分模式定位并导出
   - `ExportMetadataTVersion()`：版本模式定位并导出
     - version 由 `SetMetadataTargetVersion` 提供
-    - 若未设置（version==0），则按版本区间 [10,100] 做严格扫描（strictVersion=true）
-      仍找不到则建议改用 `ExportMetadataTScore()`
+    - 若未设置（version==0），直接返回空结果
+      建议改用 `ExportMetadataTScore()`
 
 - Hint JSON 导出函数（返回 JSON 字符串或直接写文件）：
   - `ExportMetadataHintJsonTScore(DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`

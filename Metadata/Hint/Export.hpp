@@ -1,8 +1,7 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <filesystem>
+#include <tlhelp32.h>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -21,6 +20,36 @@ namespace UnityExternal
 
 namespace detail_metadata
 {
+
+inline bool TryQueryModulePath(DWORD pid, const wchar_t* moduleName, std::wstring& outPath)
+{
+    outPath.clear();
+    if (!pid) return false;
+    if (!moduleName || !moduleName[0]) return false;
+
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+
+    MODULEENTRY32W me{};
+    me.dwSize = sizeof(me);
+
+    bool ok = false;
+    if (Module32FirstW(snapshot, &me))
+    {
+        do
+        {
+            if (_wcsicmp(me.szModule, moduleName) == 0)
+            {
+                outPath = me.szExePath;
+                ok = !outPath.empty();
+                break;
+            }
+        } while (Module32NextW(snapshot, &me));
+    }
+
+    CloseHandle(snapshot);
+    return ok;
+}
 
 inline bool BuildMetadataHintImpl(std::uint32_t requiredVersion,
                                  bool strictVersion,
@@ -43,11 +72,20 @@ inline bool BuildMetadataHintImpl(std::uint32_t requiredVersion,
 
     outHint.moduleBase = moduleBase;
 
+    if (pid && moduleName && moduleName[0])
+    {
+        std::wstring modulePath;
+        if (TryQueryModulePath(pid, moduleName, modulePath))
+        {
+            outHint.modulePath = modulePath;
+        }
+    }
+
     std::uint32_t sizeOfImage = 0;
     std::vector<ModuleSection> sections;
     if (!ReadModuleSections(*acc, moduleBase, sizeOfImage, sections))
     {
-        sizeOfImage = 0x2000000u;
+        return false;
     }
 
     outHint.moduleSize = sizeOfImage;
@@ -56,20 +94,6 @@ inline bool BuildMetadataHintImpl(std::uint32_t requiredVersion,
     if (ReadModuleImageBase(*acc, moduleBase, imageBase))
     {
         outHint.peImageBase = imageBase;
-    }
-
-    MODULEENTRY32W me{};
-    if (TryQueryModuleEntry(outHint.pid, outHint.moduleName, me))
-    {
-        outHint.modulePath = me.szExePath;
-        outHint.moduleBase = reinterpret_cast<std::uintptr_t>(me.modBaseAddr);
-        outHint.moduleSize = (std::uint32_t)me.modBaseSize;
-
-        std::uint64_t diskImageBase = 0;
-        if (TryReadPeImageBaseFromFile(std::filesystem::path(outHint.modulePath), diskImageBase))
-        {
-            outHint.peImageBase = diskImageBase;
-        }
     }
 
     FoundMeta found = FindMetadataPointerByScore(
@@ -154,11 +178,7 @@ inline std::string ExportMetadataHintJsonTVersion(DWORD pid = 0, const wchar_t* 
     MetadataHint hint;
     if (version == 0)
     {
-        if (!detail_metadata::BuildMetadataHintImpl(0, true, pid, processName, moduleName, hint))
-        {
-            return std::string();
-        }
-        return BuildMetadataHintJson(hint);
+        return std::string();
     }
     if (!detail_metadata::BuildMetadataHintImpl(version, false, pid, processName, moduleName, hint))
     {
@@ -206,5 +226,3 @@ inline bool ExportMetadataHintJsonTScoreToSidecar(const std::filesystem::path& m
 }
 
 }
-
-#endif

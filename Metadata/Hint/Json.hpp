@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 
 #include <cstdint>
@@ -20,13 +18,25 @@ namespace detail_metadata
 inline std::string WideToUtf8(const std::wstring& s)
 {
     if (s.empty()) return std::string();
-    int bytesNeeded = WideCharToMultiByte(CP_UTF8, 0, s.c_str(), -1, nullptr, 0, nullptr, nullptr);
+
+    int inChars = (int)s.size();
+    int bytesNeeded = WideCharToMultiByte(CP_UTF8, 0, s.data(), inChars, nullptr, 0, nullptr, nullptr);
     if (bytesNeeded <= 0) return std::string();
+
     std::string out;
-    out.resize((std::size_t)bytesNeeded - 1);
+    out.resize((std::size_t)bytesNeeded);
     if (!out.empty())
     {
-        WideCharToMultiByte(CP_UTF8, 0, s.c_str(), -1, out.data(), bytesNeeded, nullptr, nullptr);
+        int written = WideCharToMultiByte(CP_UTF8, 0, s.data(), inChars, out.data(), bytesNeeded, nullptr, nullptr);
+        if (written <= 0)
+        {
+            out.clear();
+            return out;
+        }
+        if (written != bytesNeeded)
+        {
+            out.resize((std::size_t)written);
+        }
     }
     return out;
 }
@@ -175,5 +185,3 @@ inline std::string BuildMetadataHintJson(const MetadataHint& hint)
 }
 
 }
-
-#endif

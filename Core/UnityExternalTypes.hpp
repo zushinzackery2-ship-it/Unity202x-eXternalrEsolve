@@ -144,6 +144,7 @@ inline bool GetMonoType(const IMemoryAccessor& mem, std::uintptr_t managedObj, T
 // Get managed object's type info (class name + namespace)
 inline bool GetManagedType(RuntimeKind runtime, const IMemoryAccessor& mem, std::uintptr_t managedObject, TypeInfo& out)
 {
+    out = TypeInfo{};
     if (!managedObject)
     {
         return false;
@@ -160,6 +161,7 @@ inline bool GetManagedType(RuntimeKind runtime, const IMemoryAccessor& mem, std:
 // Get only the class name
 inline bool GetManagedClassName(RuntimeKind runtime, const IMemoryAccessor& mem, std::uintptr_t managedObject, std::string& out)
 {
+    out.clear();
     TypeInfo info;
     if (!GetManagedType(runtime, mem, managedObject, info))
     {
@@ -172,6 +174,7 @@ inline bool GetManagedClassName(RuntimeKind runtime, const IMemoryAccessor& mem,
 // Get only the namespace
 inline bool GetManagedNamespace(RuntimeKind runtime, const IMemoryAccessor& mem, std::uintptr_t managedObject, std::string& out)
 {
+    out.clear();
     TypeInfo info;
     if (!GetManagedType(runtime, mem, managedObject, info))
     {

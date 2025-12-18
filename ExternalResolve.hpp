@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Core/UnityExternalLog.hpp"
 #include "MemoryAccessor/AccessorContainer.hpp"
 
 #include "GameObjectManager/GOMpUnit/GOM.hpp"

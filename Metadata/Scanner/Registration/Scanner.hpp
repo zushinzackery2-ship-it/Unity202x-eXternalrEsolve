@@ -1,10 +1,8 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <chrono>
 #include <cstdint>
-#include <filesystem>
+#include <cstddef>
 #include <vector>
 
 #include "../../../Core/UnityExternalMemory.hpp"
@@ -255,5 +253,3 @@ inline bool FindIl2CppRegistrations(const IMemoryAccessor& mem,
 }
 
 }
-
-#endif

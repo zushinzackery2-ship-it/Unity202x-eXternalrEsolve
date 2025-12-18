@@ -1,5 +1,6 @@
 ﻿#pragma once
 
+#include <unordered_set>
 #include <vector>
 
 #include "GOMWalker.hpp"
@@ -13,17 +14,12 @@
 namespace UnityExternal
 {
 
-inline bool GetAllLinkedBuckets(const IMemoryAccessor& mem,
-                                RuntimeKind runtime,
-                                std::uintptr_t gomGlobal,
-                                std::vector<std::uintptr_t>& outBuckets)
+inline bool GetAllLinkedBucketsFromManager(const IMemoryAccessor& mem,
+                                           std::uintptr_t managerAddress,
+                                           std::vector<std::uintptr_t>& outBuckets)
 {
     outBuckets.clear();
-    if (!gomGlobal) return false;
-    (void)runtime;
-
-    std::uintptr_t managerAddress = 0;
-    if (!GetGOMManagerFromGlobal(mem, gomGlobal, managerAddress)) return false;
+    if (!managerAddress) return false;
 
     std::uintptr_t buckets = 0;
     if (!GetGOMBucketsPtr(mem, managerAddress, buckets)) return false;
@@ -51,19 +47,37 @@ inline bool GetAllLinkedBuckets(const IMemoryAccessor& mem,
     return !outBuckets.empty();
 }
 
-inline bool GOMWalker::EnumerateGameObjectsImpl(std::uintptr_t /*managerAddress*/, std::vector<GameObjectEntry>& out) const {
-    out.clear();
-
-    std::uintptr_t gomGlobal = GetGOMGlobal();
+inline bool GetAllLinkedBuckets(const IMemoryAccessor& mem,
+                                std::uintptr_t gomGlobal,
+                                std::vector<std::uintptr_t>& outBuckets)
+{
+    outBuckets.clear();
     if (!gomGlobal) return false;
 
+    std::uintptr_t managerAddress = 0;
+    if (!GetGOMManagerFromGlobal(mem, gomGlobal, managerAddress)) return false;
+    return GetAllLinkedBucketsFromManager(mem, managerAddress, outBuckets);
+}
+
+inline bool GetAllLinkedBuckets(const IMemoryAccessor& mem,
+                                RuntimeKind runtime,
+                                std::uintptr_t gomGlobal,
+                                std::vector<std::uintptr_t>& outBuckets)
+{
+    (void)runtime;
+    return GetAllLinkedBuckets(mem, gomGlobal, outBuckets);
+}
+
+inline bool GOMWalker::EnumerateGameObjectsImpl(std::uintptr_t managerAddress, std::vector<GameObjectEntry>& out) const
+{
+    out.clear();
+    if (!managerAddress) return false;
+
     std::vector<std::uintptr_t> buckets;
-    if (!GetAllLinkedBuckets(mem_, runtime_, gomGlobal, buckets) || buckets.empty())
+    if (!GetAllLinkedBucketsFromManager(mem_, managerAddress, buckets) || buckets.empty())
     {
         return false;
     }
-
-    const std::size_t kMaxObjects = 1000000;
 
     for (std::uintptr_t bucketPtr : buckets)
     {
@@ -73,8 +87,13 @@ inline bool GOMWalker::EnumerateGameObjectsImpl(std::uintptr_t /*managerAddress*
         std::uintptr_t node = 0;
         if (!GetListNodeFirst(mem_, listHead, node)) continue;
 
-        for (std::size_t i = 0; node && i < kMaxObjects; ++i)
+        std::unordered_set<std::uintptr_t> visited;
+
+        for (; node;)
         {
+            if (visited.find(node) != visited.end()) break;
+            visited.insert(node);
+
             std::uintptr_t nativeObject = 0;
             std::uintptr_t managedObject = 0;
             std::uintptr_t next = 0;

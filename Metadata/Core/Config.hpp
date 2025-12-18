@@ -1,11 +1,9 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 
-#include <atomic>
 #include <cstdint>
+#include <atomic>
 
 #include "../../MemoryAccessor/Resolver/WinAPIResolver.hpp"
 
@@ -32,8 +30,8 @@ inline std::uintptr_t GetMetadataTargetModule()
 
 inline bool SetMetadataTarget(DWORD pid, const wchar_t* moduleName)
 {
-    const wchar_t* mod = (moduleName && moduleName[0]) ? moduleName : L"GameAssembly.dll";
-    std::uintptr_t moduleBase = FindModuleBase(pid, mod);
+    if (!moduleName || !moduleName[0]) return false;
+    std::uintptr_t moduleBase = FindModuleBase(pid, moduleName);
     if (!moduleBase) return false;
     SetMetadataTargetModule(moduleBase);
     return true;
@@ -50,5 +48,3 @@ inline std::uint32_t GetMetadataTargetVersion()
 }
 
 }
-
-#endif

@@ -1,10 +1,8 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
+#include <chrono>
 #include <algorithm>
 #include <cctype>
-#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <string>
@@ -59,14 +57,7 @@ inline FoundMeta FindMetadataPointerByScore(const IMemoryAccessor& mem,
     std::uint32_t sizeOfImage = 0;
     if (!ReadModuleSections(mem, moduleBase, sizeOfImage, sections))
     {
-        sizeOfImage = moduleSize;
-        ModuleSection ms{};
-        std::memset(ms.name, 0, sizeof(ms.name));
-        std::memcpy(ms.name, ".data", 5);
-        ms.rva = 0;
-        ms.size = std::min<std::uint32_t>(moduleSize, 0x2000000u);
-        sections.clear();
-        sections.push_back(ms);
+        return best;
     }
 
     std::vector<ModuleSection> scanSections;
@@ -83,12 +74,7 @@ inline FoundMeta FindMetadataPointerByScore(const IMemoryAccessor& mem,
     }
     if (scanSections.empty())
     {
-        ModuleSection ms{};
-        std::memset(ms.name, 0, sizeof(ms.name));
-        std::memcpy(ms.name, ".data", 5);
-        ms.rva = 0;
-        ms.size = std::min<std::uint32_t>(sizeOfImage, 0x2000000u);
-        scanSections.push_back(ms);
+        return best;
     }
 
     std::unordered_map<std::uintptr_t, std::vector<std::pair<std::uintptr_t, std::uintptr_t>>> pageMap;
@@ -167,7 +153,7 @@ inline FoundMeta FindMetadataPointerByScore(const IMemoryAccessor& mem,
                 std::memcpy(&ptr, chunkBuf.data() + off, sizeof(ptr));
                 if (ptr == 0) continue;
                 if (ptr < 0x0000000000010000ull || ptr > 0x00007FFFFFFFFFFFull) continue;
-                if ((ptr & 3ull) != 0ull) continue;
+                if ((ptr & 7ull) != 0ull) continue;
 
                 std::uintptr_t page = (std::uintptr_t)ptr & ~0xFFFull;
                 std::uintptr_t ptrAddr = chunkAddr + (std::uintptr_t)off;
@@ -202,5 +188,3 @@ inline FoundMeta FindMetadataPointerByScore(const IMemoryAccessor& mem,
 }
 
 }
-
-#endif

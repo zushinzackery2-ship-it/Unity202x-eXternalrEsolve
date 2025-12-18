@@ -1,0 +1,56 @@
+Tag查找算法
+ 
+ 0. 目标
+     - 输入 tagId，返回匹配的 native GameObject 指针
+     - 查找路径优先走 bucket 定位，避免全量枚举
+ 
+ 1. Tag 字段语义（NativeGameObject）
+     - tagRaw = *(nativeObject + 0x54)
+     - tagId  = (tagRaw & 0xFFFF)
+     - 说明：仅低 16 位参与逻辑 TagId 比较
+ 
+ 2. 算法 A：定位 tag bucket（FindBucketThroughTag）
+     - expectedMask = CalHashmaskThrougTag(tagId)
+     - expectedKey  = uint32(tagId)
+     - 遍历 buckets：bucket 满足
+         - *(bucket + 0x00) == expectedMask
+         - uint32(*(bucket + 0x08)) == expectedKey
+     - 返回 bucketPtr（失败返回 0）
+ 
+ 3. 算法 B：遍历 bucket 链表并校验 tag（FindGameObjectThroughTag）
+     3.1 链表入口
+         - bucketPtr = FindBucketThroughTag(tagId)
+         - listHead = *(bucketPtr + 0x10)
+         - node = *(listHead + 0x08)  // first
+ 
+     3.2 节点遍历（环形链表）
+         - 设置安全上限：kMaxObjects = 200000
+         - 重复：
+             - nativeObject = *(node + 0x10)
+             - 从 nativeObject 读取 tagIdValue（等价于 NativeGameObject::GetTag）
+             - 若 tagIdValue == tagId：返回 nativeObject
+             - next = *(node + 0x08)
+             - 终止条件：
+                 - 读取 next 失败
+                 - next == 0
+                 - next == listHead
+             - node = next
+         - 未命中返回 0
+ 
+ 4. FindMainCamera（Tag=5 的组合逻辑）
+     - mainGo = FindGameObjectThroughTag(5)
+     - camNative = GetComponentThroughTypeName(mainGo, "Camera")
+     - enabled = GetComponentEnabled(camNative)  // 组件启用标志在 nativeComponent + 0x38
+     - camNative 非 0 且 enabled==true 才返回
+ 
+ 5. 失败分支
+     - 全局 accessor 未设置：直接失败
+     - gomGlobal 无效 / bucketPtr 找不到：直接失败
+     - listHead/firstNode 读失败：失败
+     - 链表损坏：依赖 kMaxObjects 与 next==listHead 兜底
+ 
+ 6. 实现定位
+     - GameObjectManager/GOMpUnit/Bucket/HashCalc.hpp
+     - GameObjectManager/GOMpUnit/Bucket/Bucket.hpp
+     - GameObjectManager/GOMpUnit/Search/GOMSearch.hpp
+     - Camera/UnityExternalCamera.hpp

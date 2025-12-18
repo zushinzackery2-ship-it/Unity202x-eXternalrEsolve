@@ -16,8 +16,8 @@ inline bool IsComponentEnabled(std::uintptr_t nativeComponent)
     if (!nativeComponent) return false;
     const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
     if (!acc) return false;
-    bool enabled = true;
-    GetComponentEnabled(*acc, nativeComponent, enabled);
+    bool enabled = false;
+    if (!GetComponentEnabled(*acc, nativeComponent, enabled)) return false;
     return enabled;
 }
 

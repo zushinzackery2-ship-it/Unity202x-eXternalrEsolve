@@ -1,7 +1,5 @@
 ﻿#pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 #include <tlhelp32.h>
 #include <cstdint>
@@ -28,6 +26,7 @@ inline void SetModuleBaseResolver(ModuleBaseResolver resolver)
 
 inline DWORD WinAPI_FindProcessId(const wchar_t* processName)
 {
+    if (!processName || processName[0] == L'\0') return 0;
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) return 0;
     PROCESSENTRY32W entry{};
@@ -50,7 +49,8 @@ inline DWORD WinAPI_FindProcessId(const wchar_t* processName)
 
 inline std::uintptr_t WinAPI_FindModuleBase(DWORD pid, const wchar_t* moduleName)
 {
-    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+    if (!moduleName || moduleName[0] == L'\0') return 0;
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE, pid);
     if (snapshot == INVALID_HANDLE_VALUE) return 0;
     MODULEENTRY32W me{};
     me.dwSize = sizeof(me);
@@ -91,5 +91,3 @@ inline std::uintptr_t FindModuleBase(DWORD pid, const wchar_t* moduleName)
 }
 
 } // namespace UnityExternal
-
-#endif

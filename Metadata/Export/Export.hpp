@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <cstdint>
 #include <vector>
 
@@ -60,7 +58,7 @@ inline std::vector<std::uint8_t> ExportMetadataImpl(std::uint32_t requiredVersio
     std::vector<ModuleSection> sections;
     if (!ReadModuleSections(*acc, moduleBase, sizeOfImage, sections))
     {
-        sizeOfImage = 0x2000000u;
+        return result;
     }
 
     FoundMeta found = FindMetadataPointerByScore(
@@ -93,7 +91,7 @@ inline std::vector<std::uint8_t> ExportMetadataTVersion()
     std::uint32_t version = GetMetadataTargetVersion();
     if (version == 0)
     {
-        return detail_metadata::ExportMetadataImpl(0, true);
+        return std::vector<std::uint8_t>();
     }
     return detail_metadata::ExportMetadataImpl(version, false);
 }
@@ -109,5 +107,3 @@ inline std::vector<std::uint8_t> ExportMetadataThroughVersion()
 }
 
 }
-
-#endif

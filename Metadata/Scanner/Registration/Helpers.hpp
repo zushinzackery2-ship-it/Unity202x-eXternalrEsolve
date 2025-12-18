@@ -1,16 +1,14 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 
+#include <filesystem>
 #include <cstdint>
 #include <cstring>
-#include <filesystem>
+#include <vector>
 #include <fstream>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include "../../../Core/UnityExternalMemory.hpp"
 #include "Types.hpp"
@@ -61,6 +59,14 @@ inline bool GetDiskPeSections(const std::filesystem::path& pePath, std::vector<D
     IMAGE_FILE_HEADER fh{};
     ifs.read(reinterpret_cast<char*>(&fh), sizeof(fh));
     if (!ifs.good()) return false;
+
+    if (fh.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
+    if (fh.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) || fh.SizeOfOptionalHeader > 0x1000u) return false;
+
+    std::uint16_t optMagic = 0;
+    ifs.read(reinterpret_cast<char*>(&optMagic), sizeof(optMagic));
+    if (!ifs.good()) return false;
+    if (optMagic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return false;
 
     if (fh.NumberOfSections == 0 || fh.NumberOfSections > 128) return false;
 
@@ -128,11 +134,6 @@ inline void BuildRanges(std::uintptr_t moduleBase,
         {
             dataSecs.push_back(s);
         }
-    }
-
-    if (dataSecs.empty())
-    {
-        dataSecs = secs;
     }
 }
 
@@ -258,5 +259,3 @@ inline bool HasCountCandidate(const std::vector<std::int64_t>& candidates, std::
 }
 
 }
-
-#endif

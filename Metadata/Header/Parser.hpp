@@ -1,9 +1,8 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <algorithm>
 #include <cstdint>
+#include <cstring>
 
 #include "../../Core/UnityExternalMemory.hpp"
 
@@ -141,5 +140,3 @@ inline bool CalcTotalSizeFromHeader(const IMemoryAccessor& mem, std::uintptr_t m
 }
 
 }
-
-#endif

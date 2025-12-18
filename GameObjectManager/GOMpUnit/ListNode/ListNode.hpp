@@ -12,7 +12,8 @@ inline bool GetListNodeFirst(const IMemoryAccessor& mem, std::uintptr_t listHead
 {
     outNode = 0;
     if (!listHead) return false;
-    return ReadPtr(mem, listHead + 0x8, outNode) && outNode != 0;
+    if (!ReadPtr(mem, listHead + 0x8, outNode) || outNode == 0) return false;
+    return outNode != listHead;
 }
 
 inline std::uintptr_t GetListNodeFirst(std::uintptr_t listHead)

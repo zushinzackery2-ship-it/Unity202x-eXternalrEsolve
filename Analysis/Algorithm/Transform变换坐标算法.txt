@@ -1,0 +1,65 @@
+Transform变换坐标算法
+
+0. 目标
+    - 输入：native Transform 指针（NativeTransform.address）
+    - 输出：世界坐标 Vector3f(x,y,z)
+
+1. 关键偏移（NativeTransform）
+    - +0x38 hierarchyStatePtr: 指向层级状态结构
+    - +0x40 index: int32，当前节点在 nodeData/parentIndices 中的索引
+
+2. hierarchyStatePtr 的派生指针
+    - nodeData      = *(hierarchyStatePtr + 0x18)
+    - parentIndices = *(hierarchyStatePtr + 0x20)
+
+3. nodeData 布局（每节点 stride = 0x30 = 48 bytes）
+    - node[0..3]   : float4 t  （平移，acc 初始值）
+    - node[4..7]   : float4 q  （四元数相关系数）
+    - node[8..11]  : float4 m  （缩放/矩阵相关系数）
+
+4. 算法 A：读取层级状态（ReadHierarchyState / ReadTransformHierarchyState）
+    - 输入：transformAddr
+    - 步骤：
+        - statePtr = *(transformAddr + 0x38)
+        - nodeData = *(statePtr + 0x18)
+        - parentIndices = *(statePtr + 0x20)
+        - index = *(transformAddr + 0x40)
+    - 必要条件：
+        - transformAddr/statePtr/nodeData/parentIndices 均非 0
+        - index >= 0
+
+5. 算法 B：计算世界坐标（ComputeWorldPositionFromHierarchy）
+    5.1 初始化
+        - selfAddr = nodeData + index * 48
+        - 读取 selfNode[12 floats]
+        - acc = selfNode[0..3]（acc 表示当前累积平移向量，使用 float4）
+        - parent = *(parentIndices + index * 4)
+
+    5.2 沿父链累积
+        - 循环条件：parent >= 0 且 depth < maxDepth
+        - 每次迭代：
+            - nodeAddr = nodeData + parent * 48
+            - 读取 node[12 floats]
+            - t = node[0..3]
+            - q = node[4..7]
+            - m = node[8..11]
+            - acc = RotateScale(q, m, acc) + t
+            - parent = *(parentIndices + parent * 4)
+            - depth++
+        - RotateScale 的实现使用 SSE shuffle/mul/add（语义上为父变换对当前位置的旋转/缩放）
+
+    5.3 输出
+        - outPos.x = acc.x
+        - outPos.y = acc.y
+        - outPos.z = acc.z
+
+6. 失败分支与边界条件
+    - 任何一次内存读取失败：返回 false
+    - maxDepth <= 0：返回 false
+    - parentIndices 形成环/异常链：依赖 maxDepth 上限终止
+
+7. 实现定位
+    - GameObjectManager/Native/NativeTransform.hpp
+        - NativeTransform::ReadHierarchyState
+        - ComputeWorldPositionFromHierarchy
+        - GetTransformWorldPosition / ReadTransformHierarchyState

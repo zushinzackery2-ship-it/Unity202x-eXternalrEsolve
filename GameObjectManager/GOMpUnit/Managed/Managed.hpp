@@ -42,6 +42,8 @@ inline std::uintptr_t GetManagedFromComponent(std::uintptr_t nativeComponent)
 
 inline bool GetManagedType(std::uintptr_t managedObject, TypeInfo& out)
 {
+    out = TypeInfo{};
+    if (!managedObject) return false;
     const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
     if (!acc) return false;
     return GetManagedType(GetDefaultRuntime(), *acc, managedObject, out);

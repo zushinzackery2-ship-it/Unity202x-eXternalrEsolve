@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 #include <vector>
 
 #include "../Walker/WalkerImpl.hpp"
@@ -48,7 +49,6 @@ inline std::uintptr_t FindGameObjectThroughTag(std::int32_t tag)
 {
     const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
     if (!acc) return 0;
-    const std::size_t kMaxObjects = 200000;
 
     std::uintptr_t bucketPtr = FindBucketThroughTag(tag);
     if (!bucketPtr) return 0;
@@ -59,8 +59,13 @@ inline std::uintptr_t FindGameObjectThroughTag(std::int32_t tag)
     std::uintptr_t node = 0;
     if (!GetListNodeFirst(*acc, listHead, node)) return 0;
 
-    for (std::size_t i = 0; node && i < kMaxObjects; ++i)
+    std::unordered_set<std::uintptr_t> visited;
+
+    for (; node;)
     {
+        if (visited.find(node) != visited.end()) break;
+        visited.insert(node);
+
         std::uintptr_t nativeObject = 0;
         if (!GetListNodeNative(*acc, node, nativeObject)) break;
         if (nativeObject)

@@ -203,7 +203,7 @@ inline std::uintptr_t FindBucketThroughHashmask(std::uint32_t hashMask)
     if (!GetGOMBucketsPtr(*acc, manager, buckets)) return 0;
 
     std::int32_t bucketCount = 0;
-    if (!GetGOMBucketCount(*acc, manager, bucketCount) || bucketCount <= 0) return 0;
+    if (!GetGOMBucketCount(*acc, manager, bucketCount) || bucketCount <= 0 || bucketCount > 0x100000) return 0;
 
     const std::uintptr_t bucketStride = 24;
 
@@ -242,7 +242,7 @@ inline std::uintptr_t FindBucketThroughTag(std::int32_t tagId)
     if (!GetGOMBucketsPtr(*acc, manager, buckets)) return 0;
 
     std::int32_t bucketCount = 0;
-    if (!GetGOMBucketCount(*acc, manager, bucketCount) || bucketCount <= 0) return 0;
+    if (!GetGOMBucketCount(*acc, manager, bucketCount) || bucketCount <= 0 || bucketCount > 0x100000) return 0;
 
     const std::uint32_t expectedMask = CalHashmaskThrougTag(tagId);
     const std::uint32_t expectedKey = static_cast<std::uint32_t>(tagId);

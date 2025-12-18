@@ -60,4 +60,20 @@ inline std::int32_t GetGOMBucketCount(std::uintptr_t manager)
     return out;
 }
 
+inline bool GetGOMLocalGameObjectListHead(const IMemoryAccessor& mem, std::uintptr_t manager, std::uintptr_t& outListHead)
+{
+    outListHead = 0;
+    if (!manager) return false;
+    return ReadPtr(mem, manager + 0x28u, outListHead) && outListHead != 0;
+}
+
+inline std::uintptr_t GetGOMLocalGameObjectListHead(std::uintptr_t manager)
+{
+    const IMemoryAccessor* acc = GetGlobalMemoryAccessor();
+    if (!acc) return 0;
+    std::uintptr_t out = 0;
+    GetGOMLocalGameObjectListHead(*acc, manager, out);
+    return out;
+}
+
 } // namespace UnityExternal

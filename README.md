@@ -25,7 +25,8 @@
 
 > [!NOTE]
 > **版本兼容性说明**  
-> 本项目的结构与算法主要基于 Unity 2020~2022 版本进行逆向还原；Unity 版本过老时，部分结构偏移/算法可能无法完全兼容。
+> 本项目的结构与算法主要基于 Unity 2020~2022 版本进行逆向还原；Unity 版本过老时，部分结构偏移/算法可能无法完全兼容。  
+> 本库仅支持 Windows x64（64 位）。
 
 ## 访问器
 
@@ -42,14 +43,14 @@
 | **GameObjectManager 遍历** | 枚举所有 GameObject / Component，支持按 Tag / Name 查找 |
 | **Transform 世界坐标** | 通过 Hierarchy 层级累乘计算真实世界坐标 |
 | **相机 W2S** | 读取相机矩阵，世界坐标转屏幕坐标 |
-| **Metadata 导出** | 扫描并导出 IL2CPP `global-metadata`（返回二进制数据）；支持额外导出 `*.hint.json`（用于 dumper 侧生成 SDK）；`ExportMetadataTVersion` 未设置 version 时默认按版本区间 [10,100] 严格扫描，失败建议用 `ExportMetadataTScore` |
+| **Metadata 导出** | 扫描并导出 IL2CPP `global-metadata`（返回二进制数据）；支持额外导出 `*.hint.json`（用于 dumper 侧生成 SDK）；`ExportMetadataTVersion` 需要先设置 version（version==0 直接返回空结果），未设置时建议用 `ExportMetadataTScore` |
 | **Mono / IL2CPP** | 自动适配两种运行时的内存结构 |
 
 > [!IMPORTANT]
 > **GameObjectManager 偏移（可手动也可盲扫）**  
 > GameObjectManager 全局指针偏移因游戏/Unity版本不同而异。  
 > 该偏移指向 `gomGlobal`（全局指针槽地址）：`gomGlobal = unityPlayerBase + offset`。  
-> 除手动逆向外，也可以在运行时盲扫 `UnityPlayer.dll` 的 `.data/.rdata` 指针槽自动定位（见 `FindGOMGlobalByScan` / `ResolveAndSetGOMGlobalByScan`）。
+> 除手动逆向外，也可以在运行时盲扫 `UnityPlayer.dll` 的 `.data/.rdata` 指针槽自动定位（见 `FindGOMGlobalByScan`）。
 
 ---
 
@@ -101,6 +102,7 @@ External/
 │   │   └── WinAPIMemoryAccessor.hpp   # 默认 WinAPI 实现
 │   ├── AccessorContainer.hpp          # 全局访问器容器
 │   └── Resolver/
+│       ├── UnityWindowResolver.hpp    # 按窗口类名枚举 PID
 │       └── WinAPIResolver.hpp         # 进程/模块解析
 │
 ├── GameObjectManager/     # GameObjectManager 遍历 + 原生结构
@@ -202,11 +204,14 @@ int main()
         return 1;
     }
     
-    if (!UnityExternal::ResolveAndSetGOMGlobalByScan(unityPlayerBase))
+    UnityExternal::SetTargetPid(pid);
+    std::uint64_t offset = UnityExternal::FindGOMGlobalByScan();
+    if (!offset)
     {
-        std::uintptr_t gomGlobal = unityPlayerBase + GOM_OFFSET;  // 手动偏移（兜底）
-        UnityExternal::SetGOMGlobal(gomGlobal);
+        CloseHandle(hProcess);
+        return 1;
     }
+    UnityExternal::SetGOMGlobal(unityPlayerBase + (std::uintptr_t)offset);
     UnityExternal::SetDefaultRuntime(UnityExternal::RuntimeKind::Mono);
     // 或 RuntimeKind::Il2Cpp（根据目标游戏选择）
 
@@ -282,7 +287,8 @@ UnityExternal::SetGlobalMemoryAccessor(&accessor);
 **A:**
 
 - **手动逆向**：使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 等路径来定位。
-- **运行时盲扫**：使用 `FindGOMGlobalByScan()` / `FindUnityPlayerGOMGlobalOffsetByScan()` 
+ - **运行时盲扫**：使用 `FindGOMGlobalByScan()` 或示例工具 `gomScanner` 输出 `UnityPlayer.dll+0x????????`（表示 `gomGlobal` 槽的 RVA）。
+   - `gomScanner` 会自动枚举 `UnityWndClass` 的 PID 并逐个尝试（无需手动传 pid）。
 
 ### Q: 支持多进程同时读取吗？
 

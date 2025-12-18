@@ -10,6 +10,8 @@ namespace UnityExternal
 // Global memory accessor singleton (atomic pointer for thread-safety)
 inline std::atomic<const IMemoryAccessor*> g_memoryAccessor{nullptr};
 
+inline std::atomic<std::uint32_t> g_targetPid{0};
+
 inline void SetGlobalMemoryAccessor(const IMemoryAccessor* accessor)
 {
     g_memoryAccessor.store(accessor, std::memory_order_release);
@@ -18,6 +20,16 @@ inline void SetGlobalMemoryAccessor(const IMemoryAccessor* accessor)
 inline const IMemoryAccessor* GetGlobalMemoryAccessor()
 {
     return g_memoryAccessor.load(std::memory_order_acquire);
+}
+
+inline void SetTargetPid(std::uint32_t pid)
+{
+    g_targetPid.store(pid, std::memory_order_release);
+}
+
+inline std::uint32_t GetTargetPid()
+{
+    return g_targetPid.load(std::memory_order_acquire);
 }
 
 // Global helper functions using the global accessor

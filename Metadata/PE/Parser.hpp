@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 
 #include <cstdint>
@@ -36,25 +34,38 @@ inline bool ReadModuleSections(const IMemoryAccessor& mem,
     if (dos.e_magic != IMAGE_DOS_SIGNATURE) return false;
     if (dos.e_lfanew <= 0 || dos.e_lfanew > 0x2000) return false;
 
-    IMAGE_NT_HEADERS64 nt{};
-    if (!ReadValue(mem, moduleBase + (std::uintptr_t)dos.e_lfanew, nt)) return false;
-    if (nt.Signature != IMAGE_NT_SIGNATURE) return false;
-    if (nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
-        nt.OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR32_MAGIC)
+    DWORD sig = 0;
+    if (!ReadValue(mem, moduleBase + (std::uintptr_t)dos.e_lfanew, sig)) return false;
+    if (sig != IMAGE_NT_SIGNATURE) return false;
+
+    IMAGE_FILE_HEADER fh{};
+    if (!ReadValue(mem, moduleBase + (std::uintptr_t)dos.e_lfanew + 4u, fh)) return false;
+    std::uint16_t numberOfSections = fh.NumberOfSections;
+    if (numberOfSections == 0 || numberOfSections > 96) return false;
+
+    if (fh.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
+
+    if (fh.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) || fh.SizeOfOptionalHeader > 0x1000u)
     {
         return false;
     }
 
-    outSizeOfImage = nt.OptionalHeader.SizeOfImage;
-    if (outSizeOfImage < 0x1000 || outSizeOfImage > 0x40000000) return false;
+    std::uint16_t optMagic = 0;
+    std::uintptr_t optMagicAddr = moduleBase + (std::uintptr_t)dos.e_lfanew + 4u + sizeof(IMAGE_FILE_HEADER);
+    if (!ReadValue(mem, optMagicAddr, optMagic)) return false;
 
-    std::uint16_t numberOfSections = nt.FileHeader.NumberOfSections;
-    if (numberOfSections == 0 || numberOfSections > 96) return false;
+    if (optMagic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return false;
+
+    IMAGE_OPTIONAL_HEADER64 opt{};
+    if (!ReadValue(mem, optMagicAddr, opt)) return false;
+    outSizeOfImage = opt.SizeOfImage;
+
+    if (outSizeOfImage < 0x1000 || outSizeOfImage > 0x40000000) return false;
 
     std::uintptr_t sectionTable = moduleBase +
         (std::uintptr_t)dos.e_lfanew + 4u +
         sizeof(IMAGE_FILE_HEADER) +
-        nt.FileHeader.SizeOfOptionalHeader;
+        fh.SizeOfOptionalHeader;
 
     outSections.reserve(numberOfSections);
     for (std::uint16_t i = 0; i < numberOfSections; ++i)
@@ -62,7 +73,9 @@ inline bool ReadModuleSections(const IMemoryAccessor& mem,
         IMAGE_SECTION_HEADER sh{};
         if (!ReadValue(mem, sectionTable + (std::uintptr_t)i * sizeof(IMAGE_SECTION_HEADER), sh))
         {
-            break;
+            outSizeOfImage = 0;
+            outSections.clear();
+            return false;
         }
 
         ModuleSection ms{};
@@ -75,7 +88,7 @@ inline bool ReadModuleSections(const IMemoryAccessor& mem,
         outSections.push_back(ms);
     }
 
-    return !outSections.empty();
+    return true;
 }
 
 inline bool ReadModuleImageBase(const IMemoryAccessor& mem,
@@ -90,33 +103,29 @@ inline bool ReadModuleImageBase(const IMemoryAccessor& mem,
     if (dos.e_lfanew <= 0 || dos.e_lfanew > 0x2000) return false;
 
     std::uint32_t ntBase = (std::uint32_t)dos.e_lfanew;
+
+    DWORD sig = 0;
+    if (!ReadValue(mem, moduleBase + (std::uintptr_t)ntBase, sig)) return false;
+    if (sig != IMAGE_NT_SIGNATURE) return false;
+
+    IMAGE_FILE_HEADER fh{};
+    if (!ReadValue(mem, moduleBase + (std::uintptr_t)ntBase + 4u, fh)) return false;
+    if (fh.Machine != IMAGE_FILE_MACHINE_AMD64) return false;
+    if (fh.SizeOfOptionalHeader < sizeof(IMAGE_OPTIONAL_HEADER64) || fh.SizeOfOptionalHeader > 0x1000u) return false;
+
     std::uint16_t optMagic = 0;
     std::uintptr_t optMagicAddr = moduleBase + (std::uintptr_t)ntBase + 4u + sizeof(IMAGE_FILE_HEADER);
     if (!ReadValue(mem, optMagicAddr, optMagic)) return false;
 
-    if (optMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC)
-    {
-        IMAGE_NT_HEADERS64 nt{};
-        if (!ReadValue(mem, moduleBase + (std::uintptr_t)ntBase, nt)) return false;
-        if (nt.Signature != IMAGE_NT_SIGNATURE) return false;
-        outImageBase = (std::uint64_t)nt.OptionalHeader.ImageBase;
-        return true;
-    }
+    if (optMagic != IMAGE_NT_OPTIONAL_HDR64_MAGIC) return false;
 
-    if (optMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC)
-    {
-        IMAGE_NT_HEADERS32 nt{};
-        if (!ReadValue(mem, moduleBase + (std::uintptr_t)ntBase, nt)) return false;
-        if (nt.Signature != IMAGE_NT_SIGNATURE) return false;
-        outImageBase = (std::uint64_t)nt.OptionalHeader.ImageBase;
-        return true;
-    }
-
-    return false;
+    IMAGE_NT_HEADERS64 nt{};
+    if (!ReadValue(mem, moduleBase + (std::uintptr_t)ntBase, nt)) return false;
+    if (nt.Signature != IMAGE_NT_SIGNATURE) return false;
+    outImageBase = (std::uint64_t)nt.OptionalHeader.ImageBase;
+    return true;
 }
 
 }
 
 }
-
-#endif

@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(_WIN32) || defined(_WIN64)
-
 #include "Core/Config.hpp"
 #include "PE/Parser.hpp"
 #include "Header/Parser.hpp"
@@ -13,5 +11,3 @@
 #include "Hint/Json.hpp"
 #include "Hint/Export.hpp"
 #include "Export/Export.hpp"
-
-#endif
