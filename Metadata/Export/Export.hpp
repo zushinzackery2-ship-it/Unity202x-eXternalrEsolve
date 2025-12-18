@@ -91,7 +91,7 @@ inline std::vector<std::uint8_t> ExportMetadataTVersion()
     std::uint32_t version = GetMetadataTargetVersion();
     if (version == 0)
     {
-        return std::vector<std::uint8_t>();
+        return detail_metadata::ExportMetadataImpl(0, true);
     }
     return detail_metadata::ExportMetadataImpl(version, false);
 }

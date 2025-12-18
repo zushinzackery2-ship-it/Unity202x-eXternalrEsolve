@@ -178,7 +178,11 @@ inline std::string ExportMetadataHintJsonTVersion(DWORD pid = 0, const wchar_t* 
     MetadataHint hint;
     if (version == 0)
     {
-        return std::string();
+        if (!detail_metadata::BuildMetadataHintImpl(0, true, pid, processName, moduleName, hint))
+        {
+            return std::string();
+        }
+        return BuildMetadataHintJson(hint);
     }
     if (!detail_metadata::BuildMetadataHintImpl(version, false, pid, processName, moduleName, hint))
     {

@@ -124,13 +124,13 @@
 - 导出函数（返回二进制数据，调用者自行写文件）：
   - `ExportMetadataTScore()`：评分模式定位并导出
   - `ExportMetadataTVersion()`：版本模式定位并导出
-    - version 由 `SetMetadataTargetVersion` 提供
-    - 若未设置（version==0），直接返回空结果
-      建议改用 `ExportMetadataTScore()`
+    - 若已设置 version（`SetMetadataTargetVersion`），则精确匹配该版本
+    - 若未设置（version==0），则启用 header version 范围校验（[10,100]）通过即导出
 
 - Hint JSON 导出函数（返回 JSON 字符串或直接写文件）：
   - `ExportMetadataHintJsonTScore(DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`
   - `ExportMetadataHintJsonTVersion(DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`
+    - 若未设置（version==0），则启用 header version 范围校验（[10,100]）通过即生成
   - `ExportMetadataHintJsonTScoreToFile(const std::filesystem::path& outPath, DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`
   - `ExportMetadataHintJsonTVersionToFile(const std::filesystem::path& outPath, DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`
   - `ExportMetadataHintJsonTScoreToSidecar(const std::filesystem::path& metadataDatPath, DWORD pid = 0, const wchar_t* processName = nullptr, const wchar_t* moduleName = nullptr)`：输出到 `metadataDatPath + ".hint.json"`

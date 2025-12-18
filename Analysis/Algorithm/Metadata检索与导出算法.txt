@@ -56,6 +56,7 @@ Metadata检索与导出算法
          - 否则失败
  
  4. 算法 B：header 校验与评分（ScoreMetadataHeader）
+ 
      4.1 基础约束
          - offset 必须 4 字节对齐
          - offset + 0x120 不得越界（页内评分基于 0x1000 bytes）
@@ -63,6 +64,7 @@ Metadata检索与导出算法
      4.2 版本策略
          - requiredVersion != 0: 版本必须精确等于 requiredVersion
          - requiredVersion == 0 且 strictVersion == true: 版本必须在 [10,100]
+         - 用法说明：ExportMetadataTVersion / ExportMetadataHintJsonTVersion 在未设置版本（version==0）时，会启用 strictVersion=true 的策略，从而要求 header version 在 [10,100]
  
      4.3 关键表硬校验
          - stringOffset/stringSize 必须非 0，且 offset 4 字节对齐，且 offset >= 0x100
@@ -87,6 +89,7 @@ Metadata检索与导出算法
      - totalSize == 0 视为失败
  
  6. 算法 D：导出 metadata bytes（ExportMetadataImpl）
+ 
      6.1 moduleSize 获取
          - ReadModuleSections 成功：使用 SizeOfImage
  
@@ -103,7 +106,12 @@ Metadata检索与导出算法
          - 将 [metaBase, metaBase + totalSize) 按固定 chunk（约 1MB）分段读取
          - 拼接为 bytes 返回
  
+     6.5 TVersion 的默认行为
+         - 若 SetMetadataTargetVersion(version) 设置了非 0：requiredVersion=version，strictVersion=false（精确匹配版本）
+         - 若未设置（version==0）：requiredVersion=0，strictVersion=true（版本范围 [10,100] 校验通过即导出）
+ 
  7. 算法 E：构建 MetadataHint（BuildMetadataHintImpl）
+ 
      7.1 module 信息
          - 读取全局 accessor 与 moduleBase
          - 尝试远程 PE：读取 moduleSize / peImageBase

@@ -43,7 +43,7 @@
 | **GameObjectManager 遍历** | 枚举所有 GameObject / Component，支持按 Tag / Name 查找 |
 | **Transform 世界坐标** | 通过 Hierarchy 层级累乘计算真实世界坐标 |
 | **相机 W2S** | 读取相机矩阵，世界坐标转屏幕坐标 |
-| **Metadata 导出** | 扫描并导出 IL2CPP `global-metadata`（返回二进制数据）；支持额外导出 `*.hint.json`（用于 dumper 侧生成 SDK）；`ExportMetadataTVersion` 需要先设置 version（version==0 直接返回空结果），未设置时建议用 `ExportMetadataTScore` |
+| **Metadata 导出** | 扫描并导出 IL2CPP `global-metadata`（返回二进制数据）；支持额外导出 `*.hint.json`（用于 dumper 侧生成 SDK）；`ExportMetadataTVersion`：若已设置 version 则精确匹配该版本；若未设置（version==0）则启用 header version 范围校验（[10,100]）通过即导出 |
 | **Mono / IL2CPP** | 自动适配两种运行时的内存结构 |
 
 > [!IMPORTANT]
@@ -289,6 +289,7 @@ UnityExternal::SetGlobalMemoryAccessor(&accessor);
 - **手动逆向**：使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 等路径来定位。
  - **运行时盲扫**：使用 `FindGOMGlobalByScan()` 或示例工具 `gomScanner` 输出 `UnityPlayer.dll+0x????????`（表示 `gomGlobal` 槽的 RVA）。
    - `gomScanner` 会自动枚举 `UnityWndClass` 的 PID 并逐个尝试（无需手动传 pid）。
+   - 扫描命中后会在当前目录输出 `global-metadata_pid_<pid>.dat` 与 `metadata_hint_tscore_pid_<pid>.json`。
 
 ### Q: 支持多进程同时读取吗？
 
