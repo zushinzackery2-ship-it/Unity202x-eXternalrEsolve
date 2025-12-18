@@ -34,7 +34,7 @@
 ## 访问器
 
 - **全局上下文**：通过 `SetGlobalMemoryAccessor` / `SetGOMGlobal` / `SetDefaultRuntime` 一次性设置，后续所有 API 直接调用、直接返回结果，无需反复传参。
-- **可插拔内存访问**：默认提供 `WinAPIMemoryAccessor`（基于 `ReadProcessMemory`），可替换为自定义驱动实现 `IMemoryAccessor` 接口。
+- **可插拔内存访问**：默认提供 `WinAPIMemoryAccessor`（基于 `ReadProcessMemory`），也可以替换为你自己的 `IMemoryAccessor` 实现。
 - **Header-only**：纯头文件库，无需编译，直接 `#include "ExternalResolve.hpp"` 即可使用。
 - **Mono / IL2CPP 双支持**：通过 `RuntimeKind` 切换，自动适配两种运行时的内存布局差异。
 
@@ -42,18 +42,16 @@
 
 | 功能 | 说明 |
 |:-----|:-----|
-| **跨进程内存读取** | 基于 `ReadProcessMemory`，支持自定义驱动接口 |
-| **GameObjectManager 遍历** | 枚举所有 GameObject / Component，支持按 Tag / Name 查找 |
-| **Transform 世界坐标** | 通过 Hierarchy 层级累乘计算真实世界坐标 |
+| **进程/模块解析** | 提供 `FindProcessId` / `FindModuleBase` 等接口（解析策略可替换） |
+| **跨进程内存访问** | 默认 `WinAPIMemoryAccessor`（`ReadProcessMemory`），也可自定义 `IMemoryAccessor` |
+| **全局上下文配置** | `SetGlobalMemoryAccessor` / `SetTargetPid` / `SetDefaultRuntime` 等一次性配置 |
+| **Mono / IL2CPP** | 通过 `RuntimeKind` 切换，适配两种运行时的内存结构 |
+| **GameObjectManager 定位** | 提供 `FindGOMGlobalByScan` 等接口用于定位 `gomGlobal` 指针槽 |
+| **GameObject / Component 枚举** | `EnumerateGameObjects` / `EnumerateComponents` 遍历对象 |
+| **按 Tag/Name/类型查找** | 支持按 Tag、Name、脚本类型等条件查找（见 `GOMSearch.hpp`） |
+| **Transform 世界坐标** | 读取层级并做矩阵/向量运算，得到真实世界坐标 |
 | **相机 W2S** | 读取相机矩阵，世界坐标转屏幕坐标 |
-| **Metadata 导出** | 扫描并导出 IL2CPP `global-metadata`（返回二进制数据）；支持额外导出 `*.hint.json`（用于 dumper 侧生成 SDK）；`ExportMetadataTVersion`：若已设置 version 则精确匹配该版本；若未设置（version==0）则启用 header version 范围校验（[10,100]）通过即导出 |
-| **Mono / IL2CPP** | 自动适配两种运行时的内存结构 |
-
-> [!IMPORTANT]
-> **GameObjectManager 偏移（可手动也可盲扫）**  
-> GameObjectManager 全局指针偏移因游戏/Unity版本不同而异。  
-> 该偏移指向 `gomGlobal`（全局指针槽地址）：`gomGlobal = unityPlayerBase + offset`。  
-> 除手动逆向外，也可以在运行时盲扫 `UnityPlayer.dll` 的 `.data/.rdata` 指针槽自动定位（见 `FindGOMGlobalByScan`）。
+| **IL2CPP Metadata 扫描/导出** | 扫描并导出 `global-metadata`，并可额外导出 `*.hint.json` |
 
 ---
 
@@ -81,27 +79,12 @@ git clone https://github.com/g-truc/glm.git
 ├── ExternalResolve.hpp
 ├── Camera/
 ├── Core/
-├── GameObjectManager/
-├── Metadata/
-├── MemoryAccessor/
-└── Analysis/
-```
-
----
-
-<details>
-<summary><strong>目录结构</strong></summary>
-
-```
-External/
-├── Core/                  # 基础内存接口
 │   ├── UnityExternalMemory.hpp        # IMemoryAccessor 接口
 │   ├── UnityExternalMemoryConfig.hpp  # 全局访问器 + ReadPtrGlobal
 │   └── UnityExternalTypes.hpp         # RuntimeKind / TypeInfo / GetManagedType
 │
 ├── MemoryAccessor/        # 内存访问实现（可替换）
 │   ├── Accessor/                      # 访问器实现
-│   │   ├── DriverMemoryAccessor.hpp   # 驱动实现示例
 │   │   └── WinAPIMemoryAccessor.hpp   # 默认 WinAPI 实现
 │   ├── AccessorContainer.hpp          # 全局访问器容器
 │   └── Resolver/
@@ -176,7 +159,6 @@ External/
 │       └── 相机W2S算法.txt
 │
 └── ExternalResolve.hpp    # 统一入口（include 这个即可）
-```
 
 </details>
 
@@ -258,27 +240,6 @@ int main()
     CloseHandle(hProcess);
     return 0;
 }
-```
-
----
-
-## 自定义内存访问器
-
-默认使用 `WinAPIMemoryAccessor`，可替换为驱动或其他实现：
-
-```cpp
-class MyDriverAccessor : public UnityExternal::IMemoryAccessor {
-public:
-    bool Read(std::uintptr_t address, void* buffer, std::size_t size) const override {
-        return MyDriver::ReadMemory(address, buffer, size);
-    }
-    bool Write(std::uintptr_t address, const void* buffer, std::size_t size) const override {
-        return MyDriver::WriteMemory(address, buffer, size);
-    }
-};
-
-MyDriverAccessor accessor;
-UnityExternal::SetGlobalMemoryAccessor(&accessor);
 ```
 
 ---
