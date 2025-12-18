@@ -159,7 +159,7 @@ git clone https://github.com/g-truc/glm.git
 │
 └── ExternalResolve.hpp    # 统一入口（include 这个即可）
 
-</details>
+```
 
 ---
 
