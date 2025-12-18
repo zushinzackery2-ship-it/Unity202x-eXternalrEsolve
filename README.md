@@ -69,7 +69,11 @@
 git clone https://github.com/g-truc/glm.git
 ```
 
-目录结构：
+## 目录结构
+
+<details>
+<summary><strong>目录结构</strong></summary>
+
 ```
 项目根目录/
 ├── glm/
@@ -160,6 +164,8 @@ git clone https://github.com/g-truc/glm.git
 └── ExternalResolve.hpp    # 统一入口（include 这个即可）
 
 ```
+
+</details>
 
 ---
 
