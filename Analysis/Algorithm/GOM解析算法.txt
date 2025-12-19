@@ -1,0 +1,69 @@
+GOM遍历算法
+
+0. 目标
+    - 从 GameObjectManager 的 buckets 中枚举出全部 GameObject 节点
+    - 输出项：{node, nativeObject, managedObject}
+
+1. 输入与依赖
+    - gomGlobal: 全局入口指针槽地址（GetGOMGlobal 返回值；可由手动 offset 计算得到，或由扫描得到 offset 后再换算得到）
+    - mem: 远程内存访问器（IMemoryAccessor）
+    - runtime: 运行时类型（Mono/IL2CPP），用于 native->managed 的桥接读取（桶枚举本身不依赖 runtime）
+
+2. 结构假设（与偏移相关）
+    - manager = *(gomGlobal)
+    - bucketsPtr = *(manager + 0x00)
+    - bucketCount = *(manager + 0x08)
+    - bucketStride = 0x18
+    - listHead = *(bucket + 0x10)
+    - firstNode = *(listHead + 0x08)
+    - next = *(node + 0x08)
+    - nativeObject = *(node + 0x10)
+
+3. 算法 A：枚举可遍历桶（GetAllLinkedBuckets）
+    3.1 桶遍历
+        - for bi in [0, bucketCount)
+            - bucketPtr = bucketsPtr + bi * 0x18
+
+    3.2 桶过滤条件（实现上的“桶有效性”）
+        - 条件 1：hashMask/key 一致性
+            - 从 bucket 读出 mask 与 key
+            - 以 key32 作为 tagId 输入，计算 expectedMask = CalHashmaskThrougTag(tagId)
+            - mask 必须 == expectedMask
+        - 条件 2：链表可进入
+            - listHead = *(bucket + 0x10) 必须可读且非 0
+            - firstNode = *(listHead + 0x08) 必须可读且非 0
+
+    3.3 输出
+        - 满足条件的 bucketPtr 追加到 outBuckets
+        - outBuckets 为空则整体失败
+
+4. 算法 B：枚举 GameObject 节点（EnumerateGameObjectsImpl）
+    4.1 初始化
+        - buckets = GetAllLinkedBuckets(...)
+        - 每桶读取 listHead 与 firstNode 作为起点
+        - 使用 visited 环检测（防链表损坏导致死循环）
+
+    4.2 遍历规则（环形链表）
+        - node = firstNode
+        - 重复：
+            - nativeObject = *(node + 0x10)
+            - managedObject = GetManagedFromNative(nativeObject)（读取失败可为 0）
+            - 若 nativeObject 或 managedObject 任一非 0：push {node,nativeObject,managedObject}
+            - next = *(node + 0x08)
+            - 终止条件：
+                - visited 命中（环/重复节点）
+                - 读取 next 失败
+                - next == 0
+                - next == listHead（回到头，遍历完成）
+            - node = next
+
+5. 失败分支与边界条件
+    - gomGlobal == 0 或 manager == 0：无法开始
+    - bucketCount <= 0 或 bucketCount 过大（实现中有上限判断）：直接失败
+    - 任何 ReadPtr/ReadValue 失败：当前桶跳过或整体失败（取决于阶段）
+    - 链表损坏：依赖 visited 与 next==listHead 终止条件兜底
+
+6. 实现定位
+    - GameObjectManager/GOMpUnit/Walker/WalkerImpl.hpp
+        - GetAllLinkedBuckets
+        - GOMWalker::EnumerateGameObjectsImpl

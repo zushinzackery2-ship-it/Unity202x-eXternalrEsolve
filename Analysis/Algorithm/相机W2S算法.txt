@@ -1,0 +1,71 @@
+相机W2S算法
+
+0. 目标
+    - 将世界坐标 worldPos 投影为屏幕像素坐标 (x,y)
+    - 给出可见性与深度 depth
+
+1. 输入
+    1.1 viewProj
+        - 4x4 矩阵
+        - 来源：nativeCamera + 0x100 读取 16 floats（GetCameraViewProjMatrix）
+        - 语义：projection * view
+
+    1.2 screen
+        - ScreenRect { x, y, width, height }
+        - 常用：{0,0,屏宽,屏高}
+
+    1.3 worldPos
+        - glm::vec3 (x,y,z)
+
+    1.4 可选：camPos / camForward
+        - Full 版本用于计算“沿相机 forward 的深度”
+
+2. 输出（WorldToScreenResult）
+    - visible: bool
+    - x/y: float（像素坐标）
+    - depth: float（简化版为 clip.w；Full 版为 dot(worldPos-camPos, camForward)）
+
+3. 算法 A：WorldToScreenPoint（简化版）
+    3.1 齐次裁剪空间
+        - clip = viewProj * vec4(worldPos, 1)
+
+    3.2 背面/不可投影判定
+        - 若 clip.w <= 0.001：返回 visible=false
+
+    3.3 归一化设备坐标（NDC）
+        - ndc = clip.xyz / clip.w
+        - ndc 理论范围 [-1, 1]
+
+    3.4 NDC -> 屏幕像素
+        - sx = (ndc.x + 1) * 0.5 * screen.width  + screen.x
+        - sy = (1 - ndc.y) * 0.5 * screen.height + screen.y
+
+    3.5 visible 与 depth
+        - depth = clip.w
+        - visible = (ndc.x in [-1,1]) && (ndc.y in [-1,1])
+
+4. 算法 B：WorldToScreenPointFull（带 forward 深度）
+    4.1 齐次裁剪空间
+        - clip = viewProj * vec4(worldPos, 1)
+        - 若 clip.w <= 0.001：返回 visible=false
+
+    4.2 屏幕坐标
+        - ndc = clip.xyz / clip.w
+        - sx/sy 计算同简化版
+
+    4.3 深度定义
+        - delta = worldPos - camPos
+        - depth = dot(delta, camForward)
+
+    4.4 visible 判定（与实现一致）
+        - visible = (depth > 0)
+        - 说明：Full 版不做 NDC 范围判定，仅根据 forward 深度判断前后
+
+5. 边界与失败分支
+    - clip.w 太小/为负：返回不可见
+    - viewProj 非法（未正确读取）：结果无意义
+    - Full 版 camForward 未归一化：depth 比例会失真，但符号仍可用于前后判定
+
+6. 实现定位
+    - Camera/UnityExternalWorldToScreen.hpp
+    - GameObjectManager/GOMpUnit/Walker/WalkerImpl.hpp（GetCameraViewProjMatrix）
