@@ -37,9 +37,10 @@ inline glm::mat4 GetCameraMatrix(std::uintptr_t nativeCamera)
 
 inline std::uintptr_t FindMainCamera()
 {
+    constexpr std::int32_t kCameraTypeId = 18;
     std::uintptr_t mainGo = FindGameObjectThroughTag(5);
     if (!mainGo) return 0;
-    std::uintptr_t camNative = GetComponentThroughTypeName(mainGo, "Camera");
+    std::uintptr_t camNative = GetComponentThroughTypeId(mainGo, kCameraTypeId);
     if (!camNative || !IsComponentEnabled(camNative)) return 0;
     return camNative;
 }
