@@ -23,7 +23,8 @@
 > [!NOTE]
 > **版本兼容性说明**  
 > 本项目面向 Unity 2020~2022（Windows x64）。对比 Unity6 版本在结构偏移与布局上存在差异。  
-> 支持 Mono 与 IL2CPP 两种后端（AutoInit 自动识别）。
+> 支持 Mono 与 IL2CPP 两种后端（AutoInit 自动识别）。   
+> Unity6版本请移步至仓库:https://github.com/zushinzackery2-ship-it/Unity6-eXternalrEsolve   
 
 > [!IMPORTANT]
 > **代码重构说明**  
@@ -185,3 +186,4 @@ int main()
 
 - `er2::AutoInit()` 会自动定位 Unity 进程并填充全局上下文 `g_ctx`
 - `include/er2/unity2/init/*` 提供基于 `g_ctx + Mem()` 的薄封装，尽量减少手动传参
+
