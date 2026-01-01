@@ -1,101 +1,184 @@
-#pragma once
-
-#include <cstdint>
-#include <string>
-#include <vector>
-
-#include "../../mem/memory_read.hpp"
-#include "../object/managed/il2cpp_class.hpp"
-#include "ms_id_to_pointer.hpp"
-#include "../core/offsets.hpp"
-#include "../object/native/native_object.hpp"
-
-namespace er2
-{
-
-struct FindObjectsOfTypeAllResult
-{
-    std::uintptr_t native = 0;
-    std::uint32_t instanceId = 0;
-};
-
-inline bool FindObjectsOfTypeAll(
-    const IMemoryAccessor& mem,
-    std::uintptr_t msIdToPointerAddr,
-    const Offsets& off,
-    const UnityPlayerRange& unityPlayer,
-    const char* className,
-    std::vector<FindObjectsOfTypeAllResult>& out,
-    const char* nameSpace = nullptr)
-{
-    out.clear();
-
-    if (!className || className[0] == '\0')
-    {
-        return false;
-    }
-
-    MsIdToPointerSet set;
-    if (!ReadMsIdToPointerSet(mem, msIdToPointerAddr, set))
-    {
-        return false;
-    }
-
-    std::uintptr_t entriesBase = 0;
-    std::uint32_t capacity = 0;
-    std::uint32_t count = 0;
-    if (!ReadMsIdEntriesHeader(mem, set, entriesBase, capacity, count))
-    {
-        return false;
-    }
-
-    // 遍历所有 capacity 个桶
-    for (std::uint32_t i = 0; i < capacity; ++i)
-    {
-        const std::uintptr_t entry = entriesBase + static_cast<std::uintptr_t>(i) * kMsIdEntryStride;
-
-        MsIdToPointerEntryRaw raw;
-        if (!mem.Read(entry, &raw, sizeof(raw)))
-        {
-            continue;
-        }
-
-        // 检查 hashMask: 0xFFFFFFFF=空, 0xFFFFFFFE=已删除
-        if (raw.hashMask >= 0xFFFFFFFEu)
-        {
-            continue;
-        }
-
-        const std::uint32_t key = raw.key;
-        if (key == 0)
-        {
-            continue;
-        }
-
-        const std::uintptr_t obj = raw.object;
-        if (!IsProbablyUnityObject(mem, obj, off, unityPlayer))
-        {
-            continue;
-        }
-
-        std::uintptr_t klass = 0;
-        if (!ReadUnityObjectKlass(mem, obj, off, klass))
-        {
-            continue;
-        }
-
-        if (!IsClassOrParent(mem, klass, off, nameSpace, className))
-        {
-            continue;
-        }
-
-        FindObjectsOfTypeAllResult r;
-        r.native = obj;
-        r.instanceId = key;
-        out.push_back(r);
-    }
-
-    return true;
-}
-
-} // namespace er2
+﻿#pragma once
+
+
+
+#include <vector>
+
+#include <string>
+
+
+
+#include "enumerate_objects.hpp"
+
+
+
+namespace er2
+
+{
+
+
+
+struct FindObjectsOfTypeAllResult
+
+{
+
+    std::uintptr_t native = 0;
+
+    std::uint32_t instanceId = 0;
+
+};
+
+
+
+inline bool FindObjectsOfTypeAll(
+
+    ManagedBackend runtime,
+
+    const IMemoryAccessor& mem,
+
+    std::uintptr_t msIdToPointerAddr,
+
+    const Offsets& off,
+
+    const UnityPlayerRange& unityPlayer,
+
+    const char* targetClassName,
+
+    std::vector<FindObjectsOfTypeAllResult>& out,
+
+    const char* targetNamespace = nullptr)
+
+{
+
+    out.clear();
+
+    if (!targetClassName)
+
+    {
+
+        return false;
+
+    }
+
+
+
+    std::string targetCn = targetClassName;
+
+    std::string targetNs = targetNamespace ? targetNamespace : "";
+
+
+
+    EnumerateOptions opt;
+
+    opt.onlyGameObject = false;      // Search everything
+
+    opt.onlyScriptableObject = false; 
+
+
+
+    // Use EnumerateMsIdToPointerObjects to reuse optimized traversal logic
+
+    return EnumerateMsIdToPointerObjects(
+
+        runtime, 
+
+        mem, 
+
+        msIdToPointerAddr, 
+
+        off, 
+
+        unityPlayer, 
+
+        opt, 
+
+        [&](const ObjectInfo& info) 
+
+        {
+
+            // Parse full name "Namespace.ClassName" or just "ClassName"
+
+            // info.typeFullName
+
+            
+
+            // Should accurate match separate NS/CN or just check FullName?
+
+            // User request: "FindObjectsOfTypeAll就是从MSID池返回所有TpyeName符合传入的字符串参数的对象"
+
+            // Usually we expect exact match or "contains" match?
+
+            // Let's do exact class name match.
+
+            
+
+            // But ObjectInfo only has full string. 
+
+            // We can re-parse it or rely on String Match.
+
+            // Wait, EnumerateMsIdToPointerObjects internals already parsed NS/CN. 
+
+            // Maybe we should pass a callback to Enumerate that allows accessing raw CN/NS?
+
+            // But for now, let's parse typeFullName.
+
+            
+
+            std::string objNs;
+
+            std::string objCn;
+
+            
+
+            size_t dotPos = info.typeFullName.rfind('.');
+
+            if (dotPos != std::string::npos)
+
+            {
+
+                objNs = info.typeFullName.substr(0, dotPos);
+
+                objCn = info.typeFullName.substr(dotPos + 1);
+
+            }
+
+            else
+
+            {
+
+                objCn = info.typeFullName;
+
+            }
+
+
+
+            if (objCn == targetCn)
+
+            {
+
+                if (targetNs.empty() || objNs == targetNs)
+
+                {
+
+                    FindObjectsOfTypeAllResult res;
+
+                    res.native = info.native;
+
+                    res.instanceId = info.instanceId;
+
+                    out.push_back(res);
+
+                }
+
+            }
+
+        }
+
+    );
+
+}
+
+
+
+} // namespace er2
+
