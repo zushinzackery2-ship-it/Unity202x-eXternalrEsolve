@@ -187,4 +187,11 @@ int main()
 - `er2::AutoInit()` 会自动定位 Unity 进程并填充全局上下文 `g_ctx`
 - `include/er2/unity2/init/*` 提供基于 `g_ctx + Mem()` 的薄封装，尽量减少手动传参
 
+---
+
+<div align="center">
+
+**Platform:** Windows x64 | **License:** MIT
+
+</div>
 
