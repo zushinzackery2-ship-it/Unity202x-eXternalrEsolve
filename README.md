@@ -32,22 +32,22 @@
 
 ## 访问器
 
-- **全局上下文**：通过 `SetGlobalMemoryAccessor` / `SetGOMGlobal` / `SetDefaultRuntime` 一次性设置，后续所有 API 直接调用、直接返回结果，无需反复传参。
-- **可插拔内存访问**：默认提供 `WinAPIMemoryAccessor`（基于 `ReadProcessMemory`），也可以替换为你自己的 `IMemoryAccessor` 实现。
-- **Header-only**：纯头文件库，无需编译，直接 `#include "ExternalResolve.hpp"` 即可使用。
-- **Mono / IL2CPP 双支持**：通过 `RuntimeKind` 切换，自动适配两种运行时的内存布局差异。
+- **全局上下文**：通过 `er2::AutoInit()` 自动初始化上下文，后续所有 API 可直接调用，无需反复传参。
+- **可插拔内存访问**：默认提供 `WinApiMemoryAccessor`（基于 `ReadProcessMemory`），也可以替换为你自己的 `IMemoryAccessor` 实现。
+- **Header-only**：纯头文件库，无需编译，直接 `#include "Resolve202x.hpp"` 即可使用。
+- **Mono / IL2CPP 双支持**：`AutoInit()` 自动识别运行时；也可用 `InitSettings(pid, ManagedBackend)` 手动指定。
 
 ## 特性
 
 | 功能 | 说明 |
 |:-----|:-----|
 | **进程/模块解析** | 提供 `FindProcessId` / `FindModuleBase` 等接口（解析策略可替换） |
-| **跨进程内存访问** | 默认 `WinAPIMemoryAccessor`（`ReadProcessMemory`），也可自定义 `IMemoryAccessor` |
-| **全局上下文配置** | `SetGlobalMemoryAccessor` / `SetTargetPid` / `SetDefaultRuntime` 等一次性配置 |
-| **Mono / IL2CPP** | 通过 `RuntimeKind` 切换，适配两种运行时的内存结构 |
-| **GameObjectManager 定位** | 提供 `FindGOMGlobalByScan` 等接口用于定位 `gomGlobal` 指针槽 |
+| **跨进程内存访问** | 默认 `WinApiMemoryAccessor`（`ReadProcessMemory`），也可自定义 `IMemoryAccessor` |
+| **全局上下文配置** | `AutoInit` / `InitSettings` / `InitBase` 等一次性配置 |
+| **Mono / IL2CPP** | 通过 `ManagedBackend` 区分运行时（AutoInit 自动识别） |
+| **GameObjectManager 定位** | `AutoInit()` 内部会对 `UnityPlayer.dll` 做盲扫定位并初始化 |
 | **GameObject / Component 枚举** | `EnumerateGameObjects` / `EnumerateComponents` 遍历对象 |
-| **按 Tag/Name/类型查找** | 支持按 Tag、Name、脚本类型等条件查找（见 `GOMSearch.hpp`） |
+| **按 Tag/Name/类型查找** | 支持按 Tag、Name、脚本类型等条件查找（见 `include/er2/unity2/gom/*`） |
 | **Transform 世界坐标** | 读取层级并做矩阵/向量运算，得到真实世界坐标 |
 | **相机 W2S** | 读取相机矩阵，世界坐标转屏幕坐标 |
 | **IL2CPP Metadata 扫描/导出** | 扫描并导出 `global-metadata`，并可额外导出 `*.hint.json` |
@@ -63,11 +63,7 @@
 
 ## 依赖安装
 
- 需要手动添加 [GLM 库](https://github.com/g-truc/glm)：
-
-```bash
-git clone https://github.com/g-truc/glm.git
-```
+项目已内置 `glm/` 目录，无需额外安装。
 
 ---
 
@@ -76,93 +72,30 @@ git clone https://github.com/g-truc/glm.git
 
 ```
 项目根目录/
+├── include/
+│   └── er2/
+│       ├── core/
+│       ├── mem/
+│       ├── os/
+│       │   └── win/
+│       └── unity2/
+│           ├── core/
+│           ├── gom/
+│           ├── object/
+│           ├── camera/
+│           ├── transform/
+│           ├── msid/
+│           ├── metadata/
+│           ├── dumpsdk/
+│           └── init/
 ├── glm/
-│   ├── glm.hpp
-│   └── ...
-├── ExternalResolve.hpp
-├── Camera/
-├── Core/
-│   ├── UnityExternalMemory.hpp        # IMemoryAccessor 接口
-│   ├── UnityExternalMemoryConfig.hpp  # 全局访问器 + ReadPtrGlobal
-│   └── UnityExternalTypes.hpp         # RuntimeKind / TypeInfo / GetManagedType
-│
-├── MemoryAccessor/        # 内存访问实现（可替换）
-│   ├── Accessor/                      # 访问器实现
-│   │   └── WinAPIMemoryAccessor.hpp   # 默认 WinAPI 实现
-│   ├── AccessorContainer.hpp          # 全局访问器容器
-│   └── Resolver/
-│       ├── UnityWindowResolver.hpp    # 按窗口类名枚举 PID
-│       └── WinAPIResolver.hpp         # 进程/模块解析
-│
-├── GameObjectManager/     # GameObjectManager 遍历 + 原生结构
-│   ├── GOMpUnit/
-│   │   ├── GOM.hpp                    # 聚合头文件
-│   │   ├── Bucket/                    # Hash Bucket 结构
-│   │   │   ├── Bucket.hpp
-│   │   │   └── HashCalc.hpp
-│   │   ├── Globals/                   # 全局指针
-│   │   │   └── GOMGlobal.hpp
-│   │   ├── ListNode/                  # 链表节点
-│   │   │   └── ListNode.hpp
-│   │   ├── Managed/                   # 托管对象
-│   │   │   └── Managed.hpp
-│   │   ├── Manager/                   # 管理器
-│   │   │   └── Manager.hpp
-│   │   ├── Pool/                      # 对象池
-│   │   │   └── Pool.hpp
-│   │   ├── Search/                    # 查找功能
-│   │   │   └── GOMSearch.hpp
-│   │   └── Walker/                    # 遍历器
-│   │       ├── GOMWalker.hpp
-│   │       ├── WalkerImpl.hpp
-│   │       └── WalkerTypes.hpp
-│   ├── Managed/ManagedObject.hpp      # 托管对象封装
-│   └── Native/
-│       ├── NativeGameObject.hpp
-│       ├── NativeComponent.hpp
-│       └── NativeTransform.hpp
-│
-├── Camera/                # 相机 + W2S
-│   ├── UnityExternalCamera.hpp        # FindMainCamera / GetCameraMatrix
-│   └── UnityExternalWorldToScreen.hpp # WorldToScreenPoint
-│
-├── Metadata/              # IL2CPP global-metadata 扫描与导出
-│   ├── Core/
-│   │   └── Config.hpp                # 全局配置（目标进程/模块/版本）
-│   ├── PE/
-│   │   └── Parser.hpp                # PE 头/节区解析
-│   ├── Header/
-│   │   └── Parser.hpp                # Metadata 头部评分/大小计算
-│   ├── Scanner/
-│   │   ├── Pointer.hpp               # s_GlobalMetadata 指针扫描
-│   │   └── Registration/
-│   │       ├── Types.hpp             # Il2CppRegs, CodeRegOffsets
-│   │       ├── Helpers.hpp           # 磁盘 PE 读取/范围检查
-│   │       └── Scanner.hpp           # FindCodeRegistration/FindMetadataRegistration
-│   ├── Hint/
-│   │   ├── Struct.hpp                # MetadataHint 结构体
-│   │   ├── Json.hpp                  # JSON 序列化
-│   │   └── Export.hpp                # ExportMetadataHintJsonTScore/TVersion/ToFile
-│   ├── Export/
-│   │   └── Export.hpp                # ExportMetadataTScore/TVersion
-│   └── MetadataAll.hpp               # 聚合头文件
-│
-├── Analysis/              # 算法与结构分析文档
-│   ├── Structure/
-│   │   ├── GOM数据结构.txt
-│   │   ├── IL2CPP内存结构.txt
-│   │   └── MONO内存结构.txt
-│   └── Algorithm/
-│       ├── GOM定位算法.txt
-│       ├── GOM解析算法.txt
-│       ├── Metadata检索与导出算法.txt
-│       ├── TagHash掩码算法.txt
-│       ├── Tag查找算法.txt
-│       ├── Transform变换坐标算法.txt
-│       └── 相机W2S算法.txt
-│
-└── ExternalResolve.hpp    # 统一入口（include 这个即可）
-
+├── imgui/
+├── Analysis/
+├── docs/
+├── tools/
+├── Resolve202x.hpp
+├── test.cpp
+└── build_test.bat
 ```
 
 </details>
@@ -172,77 +105,19 @@ git clone https://github.com/g-truc/glm.git
 ## 快速开始
 
 ```cpp
-#include "External/ExternalResolve.hpp"
+#include "Resolve202x.hpp"
+#include <cstdio>
 
 int main()
 {
-    // 1. 解析进程和模块（以 WinAPI 为例）
-    UnityExternal::UseWinAPIResolvers();
-    DWORD pid = UnityExternal::FindProcessId(L"Game.exe");
-    HANDLE hProcess = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, FALSE, pid);
-
-    // 2. 创建内存访问器并设置为全局
-    UnityExternal::WinAPIMemoryAccessor accessor(hProcess);
-    UnityExternal::SetGlobalMemoryAccessor(&accessor);
-
-    // 3. 写入 gomGlobal 指针槽地址和默认运行时
-    std::uintptr_t unityPlayerBase = UnityExternal::FindModuleBase(pid, L"UnityPlayer.dll");
-    if (!unityPlayerBase)
+    if (!er2::AutoInit())
     {
-        std::cerr << "Failed to find UnityPlayer.dll" << std::endl;
-        CloseHandle(hProcess);
         return 1;
     }
-    
-    UnityExternal::SetTargetPid(pid);
-    std::uint64_t offset = UnityExternal::FindGOMGlobalByScan();
-    if (!offset)
-    {
-        CloseHandle(hProcess);
-        return 1;
-    }
-    UnityExternal::SetGOMGlobal(unityPlayerBase + (std::uintptr_t)offset);
-    UnityExternal::SetDefaultRuntime(UnityExternal::RuntimeKind::Mono);
-    // 或 RuntimeKind::Il2Cpp（根据目标游戏选择）
 
-    // 4. 遍历所有 GameObject
-    auto gameObjects = UnityExternal::EnumerateGameObjects();
-    for (const auto& go : gameObjects)
-    {
-        try
-        {
-            UnityExternal::NativeGameObject nativeGO(go.nativeObject);
-            std::string name = nativeGO.GetName();
-            std::cout << "GameObject: " << name << std::endl;
-        }
-        catch (const std::exception& e)
-        {
-            std::cerr << "Error reading GameObject: " << e.what() << std::endl;
-        }
-    }
+    auto controller = er2::GetGameObjectByName("Controller");
+    printf("Controller: 0x%llX\n", controller);
 
-    // 5. 查找主相机并读取相机矩阵
-    std::uintptr_t camNative = UnityExternal::FindMainCamera();
-    if (camNative)
-    {
-        glm::mat4 camMatrix = UnityExternal::GetCameraMatrix(camNative);
-
-        // 6. 获取 Transform 世界坐标
-        UnityExternal::Vector3f worldPos;
-        UnityExternal::GetTransformWorldPosition(transformNative, worldPos);
-
-        // 7. 世界坐标转屏幕坐标
-        UnityExternal::ScreenRect screen{ 0, 0, 1920, 1080 };
-        auto result = UnityExternal::WorldToScreenPoint(camMatrix, screen,
-            glm::vec3(worldPos.x, worldPos.y, worldPos.z));
-
-        if (result.visible)
-        {
-            // 绘制 ESP ...
-        }
-    }
-
-    CloseHandle(hProcess);
     return 0;
 }
 ```
@@ -256,7 +131,7 @@ int main()
 **A:**
 
 - **手动逆向**：使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 等路径来定位。
- - **运行时盲扫**：使用 `FindGOMGlobalByScan()` 直接返回
+- **运行时盲扫**：直接调用 `er2::AutoInit()`，内部会对 `UnityPlayer.dll` 做盲扫定位并初始化上下文。
 
 ### Q: 支持多进程同时读取吗？
 
