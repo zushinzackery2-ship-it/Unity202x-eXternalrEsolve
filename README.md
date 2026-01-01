@@ -1,15 +1,14 @@
 <div align="center">
 
-# UnityExternalResolve
+# External-oldVersion4Unity202x
 
-**Unity 运行时内存结构算法还原库**
+**Unity 2020-2022 运行时内存结构算法还原库（er2 / header-only）**
 
-*跨进程读取 | Header-Only | Mono & IL2CPP*
+*跨进程读取 | Header-Only | IL2CPP/MONO*
 
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey?style=flat-square)
 ![Header Only](https://img.shields.io/badge/Header--Only-Yes-green?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)
 
 </div>
 
@@ -23,47 +22,87 @@
 
 > [!NOTE]
 > **版本兼容性说明**  
-> 本项目的结构与算法主要基于 Unity 2020~2022 版本进行逆向还原；Unity 版本过老时，部分结构偏移/算法可能无法完全兼容。  
-> 本库仅支持 Windows x64（64 位）。
+> 本项目面向 Unity 2020~2022（Windows x64）。对比 Unity6 版本在结构偏移与布局上存在差异。  
+> 支持 Mono 与 IL2CPP 两种后端（AutoInit 自动识别）。
 
 > [!IMPORTANT]
 > **代码重构说明**  
-> 当前项目包含大量 AI 重构代码，如发现问题欢迎提交 Issue。
+> 当前项目包含'**相当大量**'的AI重构代码，可能存在大量维护性问题。  
+> 功能实现集中在 `include/er2`，入口侧尽量保持薄封装。
 
 ## 访问器
 
-- **全局上下文**：通过 `er2::AutoInit()` 自动初始化上下文，后续所有 API 可直接调用，无需反复传参。
-- **可插拔内存访问**：默认提供 `WinApiMemoryAccessor`（基于 `ReadProcessMemory`），也可以替换为你自己的 `IMemoryAccessor` 实现。
-- **Header-only**：纯头文件库，无需编译，直接 `#include "Resolve202x.hpp"` 即可使用。
-- **Mono / IL2CPP 双支持**：`AutoInit()` 自动识别运行时；也可用 `InitSettings(pid, ManagedBackend)` 手动指定。
+- **最小内存访问抽象**：以 `IMemoryAccessor` 为核心，算法层只依赖读内存接口。
+- **Windows 适配**：默认提供 WinAPI 实现（`ReadProcessMemory`）适配器。
+- **Header-only**：纯头文件库。
 
-## 特性
+## 功能概览
 
 | 功能 | 说明 |
 |:-----|:-----|
-| **进程/模块解析** | 提供 `FindProcessId` / `FindModuleBase` 等接口（解析策略可替换） |
-| **跨进程内存访问** | 默认 `WinApiMemoryAccessor`（`ReadProcessMemory`），也可自定义 `IMemoryAccessor` |
-| **全局上下文配置** | `AutoInit` / `InitSettings` / `InitBase` 等一次性配置 |
-| **Mono / IL2CPP** | 通过 `ManagedBackend` 区分运行时（AutoInit 自动识别） |
-| **GameObjectManager 定位** | `AutoInit()` 内部会对 `UnityPlayer.dll` 做盲扫定位并初始化 |
-| **GameObject / Component 枚举** | `EnumerateGameObjects` / `EnumerateComponents` 遍历对象 |
-| **按 Tag/Name/类型查找** | 支持按 Tag、Name、脚本类型等条件查找（见 `include/er2/unity2/gom/*`） |
-| **Transform 世界坐标** | 读取层级并做矩阵/向量运算，得到真实世界坐标 |
-| **相机 W2S** | 读取相机矩阵，世界坐标转屏幕坐标 |
-| **IL2CPP Metadata 扫描/导出** | 扫描并导出 `global-metadata`，并可额外导出 `*.hint.json` |
+| **AutoInit + 上下文管理** | 自动发现 Unity 进程、定位 UnityPlayer/GameAssembly (IL2CPP) 或 Mono 模块、缓存关键 offset/全局槽，并暴露 `g_ctx + Mem()` 读写入口 |
+| **跨进程内存访问** | 以 `IMemoryAccessor` 为核心，提供 WinAPI 适配，所有算法都只依赖统一的读内存接口 |
+| **GOM 扫描与遍历** | 盲扫 GameObjectManager、校验桶结构、枚举 GameObject/组件，支持按 tag/名称/组件类型快速搜索 |
+| **MSID 全局注册表** | 枚举 `UnityEngine.Object` 实例，筛选 GameObject/ScriptableObject，读取名称、InstanceID、托管类型等信息 |
+| **Transform / Camera / W2S** | 解析 Transform 层级得到世界坐标；读取相机视图投影矩阵并完成世界坐标到屏幕坐标转换 |
+| **Bones** | 遍历 Transform 子树获取骨骼索引、名称与世界坐标 |
+| **IL2CPP Metadata + Hint 导出** | 自动扫描 metadata header、导出 `global-metadata.dat`，并可生成 `*.hint.json` |
+| **DumpSDK2 工具链** | 结合 metadata/hint 结果生成 C# API 描述与泛型结构信息，辅助离线分析/SDK 导出 |
+| **模块化 Header-only 设计** | `er2/unity2/*` 下分门别类的子模块（gom/msid/object/camera/transform/metadata 等），可按需引用 |
+
+---
+
+## 核心 API 列表
+
+| 模块 | 代表 API | 说明 |
+|:----|:---------|:-----|
+| **上下文 / AutoInit** | `AutoInit()` / `IsInited()` | 自动发现 Unity 进程、刷新 `g_ctx` |
+|  | `ReadPtr(addr)` / `ReadValue<T>(addr)` | 基于 `g_ctx + Mem()` 的统一读内存封装 |
+| **GOM** | `GomManager()` / `GomBucketsPtr()` / `FindGameObjectThroughTag(tag)` | 访问 GameObjectManager、遍历桶并按 tag 搜索 |
+|  | `EnumerateGameObjects()` / `GetGameObjectByName(name)` | 列举 GameObject，或按名称精确查找 |
+| **MSID** | `MsIdToPointerSlotVa()` / `MsIdCount()` | 读取 ms_id_to_pointer set 元数据 |
+|  | `FindObjectsOfTypeAll(ns, name)` | 枚举或按命名空间+类型名查找 `UnityEngine.Object` 实例 |
+| **对象/名称** | `ReadGameObjectName(nativeGo)` | 读取 Native/Managed 对象名称 |
+| **Transform / Camera / W2S** | `GetTransformWorldPosition(transformPtr)` | 解析层级状态，输出世界坐标 |
+|  | `FindMainCamera()` / `GetCameraMatrix(nativeCamera)` | 找主相机、读取视图投影矩阵 |
+| **Metadata / Hint** | `ExportGameAssemblyMetadataByScore()` | 一次性导出 metadata bytes 与 hint json |
+| **DumpSDK2** | `DumpSdk` 相关接口 | 生成 C# API 与泛型结构描述 |
+
+---
+
+## AutoInit 后可直接调用的 API
+
+调用 `er2::AutoInit()` 成功后，以下 API 可直接使用，无需手动传递 mem/offsets 等参数。
+
+| 分类 | API | 说明 |
+|:-----|:----|:-----|
+| **上下文** | `Pid()` | 返回目标进程 PID |
+|  | `IsInited()` | 是否已初始化 |
+|  | `Runtime()` | 返回 Backend 类型 (IL2CPP/Mono) |
+| **GameObject** | `EnumerateGameObjects()` | 枚举所有 GameObject，返回 `optional<vector<GameObjectEntry>>` |
+|  | `FindGameObjectThroughTag(tag)` | 按 Tag 查找 GameObject |
+|  | `GetGameObjectByName(name)` | 按名称查找 GameObject |
+| **组件** | `GetTransformComponent(go)` | 获取 Transform 组件 |
+|  | `GetCameraComponent(go)` | 获取 Camera 组件 |
+| **Transform** | `GetTransformWorldPosition(transform)` | 获取 Transform 世界坐标 |
+|  | `GetBoneTransformAll(rootGo)` | 获取骨骼列表 |
+| **相机 / W2S** | `FindMainCamera()` | 查找主相机 |
+|  | `GetCameraMatrix(cam)` | 获取相机 ViewProj 矩阵 |
+|  | `WorldToScreenPoint(viewProj, screen, pos)` | 世界坐标转屏幕坐标 |
+| **MSID** | `FindObjectsOfTypeAll(className)` | 按类名查找所有实例 |
+| **Metadata** | `ExportGameAssemblyMetadataByScore()` | 导出 metadata 字节 |
+
+> **返回值说明**：返回 `optional<T>` 的函数成功时有值，失败时为空；返回 `bool` + out 参数的函数成功返回 true。
 
 ---
 
 ## 编译要求
 
-- **C++ 标准**：C++17 或以上
-- **编译器**：MSVC (Visual Studio 2019+) 或 MinGW (GCC 9+)
+- **C++ 标准**：C++17
+- **编译器**：MSVC（Visual Studio 2022）
 - **平台**：Windows x64
-- **头文件库**：GLM（数学库）
-
-## 依赖安装
-
-项目已内置 `glm/` 目录，无需额外安装。
+- **链接方式**：静态运行时（/MT）
+- **第三方库**：仓库已包含 `glm/`（工具侧编译 bat 已默认添加 include）
 
 ---
 
@@ -71,31 +110,29 @@
 <summary><strong>目录结构</strong></summary>
 
 ```
-项目根目录/
+External-oldVersion4Unity202x/
+├── Resolve202x.hpp             # 统一入口头文件
 ├── include/
 │   └── er2/
-│       ├── core/
-│       ├── mem/
-│       ├── os/
-│       │   └── win/
+│       ├── core/               # 基础类型定义
+│       ├── mem/                # 内存访问抽象
+│       ├── os/win/             # Windows 平台实现
 │       └── unity2/
-│           ├── core/
-│           ├── gom/
-│           ├── object/
-│           ├── camera/
-│           ├── transform/
-│           ├── msid/
-│           ├── metadata/
-│           ├── dumpsdk/
-│           └── init/
-├── glm/
-├── imgui/
+│           ├── camera/         # 相机与 W2S
+│           ├── core/           # 偏移定义
+│           ├── dumpsdk/        # SDK 导出
+│           ├── gom/            # GameObjectManager
+│           ├── init/           # AutoInit 封装层
+│           ├── metadata/       # IL2CPP 元数据
+│           ├── msid/           # InstanceID 映射
+│           ├── object/         # Native/Managed 对象
+│           ├── transform/      # Transform 世界坐标
+│           └── util/           # 工具函数
 ├── Analysis/
-├── docs/
-├── tools/
-├── Resolve202x.hpp
-├── test.cpp
-└── build_test.bat
+│   ├── Algorithms/             # 算法说明文档
+│   └── Structures/             # 结构说明文档
+├── tools/                      # 示例工具
+└── docs/                       # 补充文档
 ```
 
 </details>
@@ -110,13 +147,33 @@
 
 int main()
 {
+    // 自动发现 Unity 进程并初始化上下文
     if (!er2::AutoInit())
     {
         return 1;
     }
 
+    // 输出环境信息
+    printf("Runtime: %s\n", er2::Runtime() == er2::ManagedBackend::Il2Cpp ? "IL2CPP" : "Mono");
+
+    // 查找主相机
+    const std::uintptr_t cam = er2::FindMainCamera();
+    if (cam)
+    {
+        // 获取相机矩阵
+        auto viewProjOpt = er2::GetCameraMatrix(cam);
+        if (viewProjOpt.has_value())
+        {
+            // ...
+        }
+    }
+
+    // 按名称查找游戏对象
     auto controller = er2::GetGameObjectByName("Controller");
-    printf("Controller: 0x%llX\n", controller);
+    if (controller) 
+    {
+        printf("Controller: 0x%llX\n", (unsigned long long)controller);
+    }
 
     return 0;
 }
@@ -124,27 +181,7 @@ int main()
 
 ---
 
-## 常见问题
+## AutoInit 与 init/* 封装
 
-### Q: 如何找到 GameObjectManager 全局指针偏移？
-
-**A:**
-
-- **手动逆向**：使用 IDA Pro 或 CheatEngine 动态分析 `Camera.get_main()` 等路径来定位。
-- **运行时盲扫**：直接调用 `er2::AutoInit()`，内部会对 `UnityPlayer.dll` 做盲扫定位并初始化上下文。
-
-### Q: 支持多进程同时读取吗？
-
-**A:** 支持，通过 `IMemoryAccessor` 接口可并行读取多个进程。但需要为每个进程创建独立的 `accessor`，并通过参数传递而非全局访问器。
-
-### Q: 是否支持多线程访问？
-
-**A:** 支持，但内存访问本身是串行的（基于 `ReadProcessMemory`）。建议使用线程池模式进行批量查询。
-
----
-
-<div align="center">
-
-**Platform:** Windows x64 | **License:** MIT
-
-</div>
+- `er2::AutoInit()` 会自动定位 Unity 进程并填充全局上下文 `g_ctx`
+- `include/er2/unity2/init/*` 提供基于 `g_ctx + Mem()` 的薄封装，尽量减少手动传参
