@@ -22,7 +22,7 @@
 
 > [!NOTE]
 > **版本兼容性说明**  
-> 本项目面向 Unity 2020~2023（Windows x64）。对比 Unity6 版本在结构偏移与布局上存在差异。  
+> 本项目面向 Unity 2020~2023（Windows x64）。对比 Unity2020 更早版本在部分结构偏移与布局上存在差异。  
 > 支持 Mono 与 IL2CPP 两种后端（AutoInit 自动识别）。   
 > Unity6版本请移步至仓库:https://github.com/zushinzackery2-ship-it/Unity6-eXternalrEsolve   
 
@@ -194,4 +194,5 @@ int main()
 **Platform:** Windows x64 | **License:** MIT
 
 </div>
+
 
