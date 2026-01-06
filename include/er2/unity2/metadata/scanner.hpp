@@ -1,3 +1,3 @@
-﻿#pragma once
-
-#include "scanner_pointer.hpp"
+﻿#pragma once
+
+#include "scanner_pointer.hpp"
