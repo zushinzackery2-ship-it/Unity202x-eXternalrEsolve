@@ -63,6 +63,7 @@
 |  | `EnumerateGameObjects()` / `GetGameObjectByName(name)` | 列举 GameObject，或按名称精确查找 |
 | **MSID** | `MsIdToPointerSlotVa()` / `MsIdCount()` | 读取 ms_id_to_pointer set 元数据 |
 |  | `FindObjectsOfTypeAll(ns, name)` | 枚举或按命名空间+类型名查找 `UnityEngine.Object` 实例 |
+| **ClassMap (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` / `FindClass(fullName)` | 初始化/查询 IL2CPP 类型表；`fullName` 需传完整名（如 `UnityEngine.Transform`） |
 | **对象/名称** | `ReadGameObjectName(nativeGo)` | 读取 Native/Managed 对象名称 |
 | **Transform / Camera / W2S** | `GetTransformWorldPosition(transformPtr)` | 解析层级状态，输出世界坐标 |
 |  | `FindMainCamera()` / `GetCameraMatrix(nativeCamera)` | 找主相机、读取视图投影矩阵 |
@@ -90,6 +91,10 @@
 |  | `TransformOff()` | 返回 Transform 偏移量结构 `TransformOffsets` |
 |  | `ReadPtr(addr)` | 读取指针，返回 `optional<uintptr_t>` |
 |  | `ReadValue<T>(addr)` | 读取任意类型值，返回 `optional<T>` |
+| **ClassMap (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` | 初始化并校验 `typeInfoTable` |
+|  | `FindClassIndex(fullName)` | 通过完整类型名获取 byval 索引 |
+|  | `FindClassByIndex(idx)` | 通过 byval 索引获取 `Il2CppClass*` |
+|  | `FindClass(fullName)` | 通过完整类型名获取 `Il2CppClass*` |
 | **GameObject** | `EnumerateGameObjects()` | 枚举所有 GameObject，返回 `optional<vector<GameObjectEntry>>` |
 |  | `FindGameObjectThroughTag(tag)` | 按 Tag 查找第一个 GameObject，返回 `uintptr_t` |
 |  | `GetGameObjectByName(name)` | 按名称查找所有同名 GameObject，返回 `vector<uintptr_t>` |
@@ -107,6 +112,7 @@
 | **Metadata** | `ExportGameAssemblyMetadataByScore()` | 导出 metadata 字节 |
 
 > **返回值说明**：返回 `optional<T>` 的函数成功时有值，失败时为空；返回 `bool` + out 参数的函数成功返回 true。
+> **FindClass 说明（IL2CPP）**：`FindClass` 不做模糊匹配，参数必须是完整类型名（命名空间+类名），例如 `UnityEngine.Transform`。
 
 ---
 
