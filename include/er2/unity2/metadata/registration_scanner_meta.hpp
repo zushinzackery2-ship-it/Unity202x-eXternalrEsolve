@@ -16,6 +16,8 @@
 
 #include "../../mem/memory_read.hpp"
 
+#include "../dumpsdk/sdk_registration.hpp"
+
 #include "registration_helpers.hpp"
 
 #include "pe.hpp"
@@ -237,6 +239,177 @@ inline bool FindMetadataRegistrationFromMemory(
     return false;
 }
 
+inline bool FindMetadataRegistrationSidecarStyle(
+    const IMemoryAccessor& mem,
+    std::uintptr_t moduleBase,
+    std::uint32_t moduleSize,
+    std::uintptr_t metaBase,
+    std::size_t chunkSize,
+    double maxSeconds,
+    std::uintptr_t& outAddr)
+{
+    outAddr = 0;
+    if (moduleBase == 0 || moduleSize == 0 || metaBase == 0)
+    {
+        return false;
+    }
+
+    std::uint32_t version = 0;
+    if (!ReadValue(mem, metaBase + 0x04u, version))
+    {
+        return false;
+    }
+
+    const MetaRegOffsets off = GetMetadataRegistrationOffsets(version);
+    if (off.fieldOffsetsCount < 0 ||
+        off.typeDefinitionsSizesCount < 0 ||
+        off.typeDefinitionsSizes < 0)
+    {
+        return false;
+    }
+
+    if (off.typeDefinitionsSizesCount < off.fieldOffsetsCount ||
+        off.typeDefinitionsSizes < off.fieldOffsetsCount)
+    {
+        return false;
+    }
+
+    std::uint32_t typeDefSize = 0;
+    if (!ReadValue(mem, metaBase + 0xA4u, typeDefSize))
+    {
+        return false;
+    }
+
+    const std::vector<std::int64_t> typeDefCounts = InferTypeDefCounts(typeDefSize);
+    if (typeDefCounts.empty())
+    {
+        return false;
+    }
+
+    std::vector<ModuleSection> modSecs;
+    std::uint32_t sizeOfImage = 0;
+    if (!ReadModuleSections(mem, moduleBase, sizeOfImage, modSecs))
+    {
+        return false;
+    }
+
+    std::vector<DiskSection> secs;
+    ConvertModuleSectionsToDiskSections(modSecs, secs);
+
+    std::vector<std::pair<std::uintptr_t, std::uintptr_t>> execRanges;
+    std::vector<std::pair<std::uintptr_t, std::uintptr_t>> dataRanges;
+    std::vector<DiskSection> dataSecs;
+    BuildRanges(moduleBase, secs, execRanges, dataRanges, dataSecs);
+
+    const std::size_t typeDefinitionsSizesCountDelta =
+        static_cast<std::size_t>(off.typeDefinitionsSizesCount - off.fieldOffsetsCount);
+    const std::size_t typeDefinitionsSizesDelta =
+        static_cast<std::size_t>(off.typeDefinitionsSizes - off.fieldOffsetsCount);
+    const std::size_t requiredTail = typeDefinitionsSizesDelta + sizeof(std::uint64_t);
+    const std::size_t effectiveChunkSize = chunkSize == 0 ? 0x20000u : chunkSize;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration<double>(maxSeconds);
+
+    std::vector<std::uint8_t> buf;
+    for (const auto& sec : dataSecs)
+    {
+        if (std::chrono::steady_clock::now() > deadline)
+        {
+            break;
+        }
+
+        if (sec.vsize == 0)
+        {
+            continue;
+        }
+
+        const std::uintptr_t start = moduleBase + static_cast<std::uintptr_t>(sec.rva);
+        const std::uint32_t size = sec.vsize;
+
+        std::uint32_t offset = 0;
+        while (offset < size && std::chrono::steady_clock::now() <= deadline)
+        {
+            const std::uint32_t remain = size - offset;
+            const std::size_t toRead =
+                remain > static_cast<std::uint32_t>(effectiveChunkSize)
+                    ? effectiveChunkSize
+                    : static_cast<std::size_t>(remain);
+            if (!ReadChunk(mem, start + static_cast<std::uintptr_t>(offset), toRead, buf))
+            {
+                offset += static_cast<std::uint32_t>(toRead);
+                continue;
+            }
+
+            if (buf.size() <= requiredTail)
+            {
+                offset += static_cast<std::uint32_t>(toRead);
+                continue;
+            }
+
+            const std::size_t scanEnd = buf.size() - requiredTail;
+            for (std::size_t i = 0; i <= scanEnd; i += sizeof(std::uint64_t))
+            {
+                const std::int64_t fieldOffsetsCnt = I64At(buf, i);
+                if (!HasCountCandidate(typeDefCounts, fieldOffsetsCnt))
+                {
+                    continue;
+                }
+
+                const std::int64_t typeSizesCnt = I64At(buf, i + typeDefinitionsSizesCountDelta);
+                if (typeSizesCnt != fieldOffsetsCnt)
+                {
+                    continue;
+                }
+
+                const std::uint64_t typeSizesPtr = U64At(buf, i + typeDefinitionsSizesDelta);
+                if (typeSizesPtr == 0 || !InAny(static_cast<std::uintptr_t>(typeSizesPtr), dataRanges))
+                {
+                    continue;
+                }
+
+                const std::uintptr_t fieldOffsetsCountAddr =
+                    start + static_cast<std::uintptr_t>(offset) + static_cast<std::uintptr_t>(i);
+                if (fieldOffsetsCountAddr < static_cast<std::uintptr_t>(off.fieldOffsetsCount))
+                {
+                    continue;
+                }
+
+                const std::uintptr_t candidate =
+                    fieldOffsetsCountAddr - static_cast<std::uintptr_t>(off.fieldOffsetsCount);
+
+                std::uintptr_t typesPtr = 0;
+                std::uint32_t typesCount = 0;
+                std::uintptr_t fieldOffsetsPtr = 0;
+                if (!DumpSdk6GetMetadataRegistrationTypes(
+                        mem,
+                        candidate,
+                        version,
+                        typesPtr,
+                        typesCount,
+                        fieldOffsetsPtr) ||
+                    typesPtr == 0 ||
+                    fieldOffsetsPtr == 0 ||
+                    typesCount == 0 ||
+                    typesCount > 300000u)
+                {
+                    continue;
+                }
+
+                if (!InAny(typesPtr, dataRanges) || !InAny(fieldOffsetsPtr, dataRanges))
+                {
+                    continue;
+                }
+
+                outAddr = candidate;
+                return true;
+            }
+
+            offset += static_cast<std::uint32_t>(toRead);
+        }
+    }
+
+    return false;
+}
+
 
 
 inline bool FindMetadataRegistration(
@@ -273,7 +446,12 @@ inline bool FindMetadataRegistration(
     // 如果没有磁盘路径，从内存读取sections
     if (modulePath.empty())
     {
-        return FindMetadataRegistrationFromMemory(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr);
+        if (FindMetadataRegistrationFromMemory(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr))
+        {
+            return true;
+        }
+
+        return FindMetadataRegistrationSidecarStyle(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr);
     }
 
     std::vector<DiskSection> secs;
@@ -282,7 +460,15 @@ inline bool FindMetadataRegistration(
 
     {
 
-        return false;
+        if (FindMetadataRegistrationFromMemory(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr))
+
+        {
+
+            return true;
+
+        }
+
+        return FindMetadataRegistrationSidecarStyle(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr);
 
     }
 
@@ -602,7 +788,17 @@ inline bool FindMetadataRegistration(
 
 
 
-    return false;
+    if (FindMetadataRegistrationFromMemory(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr))
+
+    {
+
+        return true;
+
+    }
+
+
+
+    return FindMetadataRegistrationSidecarStyle(mem, moduleBase, moduleSize, metaBase, chunkSize, maxSeconds, outAddr);
 
 }
 

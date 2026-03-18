@@ -1,0 +1,29 @@
+# Visual Studio
+.vs/
+*.VC.db
+*.VC.opendb
+*.opendb
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ipch
+
+# Build outputs
+[Bb]in/
+[Oo]bj/
+*.obj
+*.iobj
+*.ipdb
+*.idb
+*.ilk
+*.pch
+*.pdb
+*.tlog
+*.lastbuildstate
+*.recipe
+vcpkg.applocal.log
+
+# Test build outputs
+tests/**/bin/
+tests/**/obj/

@@ -42,9 +42,11 @@
 | 功能 | 说明 |
 |:-----|:-----|
 | **AutoInit + 上下文管理** | 自动发现 Unity 进程、定位 UnityPlayer/GameAssembly (IL2CPP) 或 Mono 模块、缓存关键 offset/全局槽，并暴露 `g_ctx + Mem()` 读写入口 |
-| **跨进程内存访问** | 以 `IMemoryAccessor` 为核心，提供 WinAPI 适配，所有算法都只依赖统一的读内存接口 |
+| **Backend 抽象** | 以 `IContextBackend` 为核心抽象进程句柄、模块查询与内存访问，默认提供 `WinApiContextBackend`，后续可平滑扩展 Driver backend |
+| **跨进程内存访问** | 以 `IMemoryAccessor` 为核心，算法层统一依赖 `const IMemoryAccessor&`，默认提供 WinAPI 适配 |
 | **GOM 扫描与遍历** | 盲扫 GameObjectManager、校验桶结构、枚举 GameObject/组件，支持按 tag/名称/组件类型快速搜索 |
 | **MSID 全局注册表** | 枚举 `UnityEngine.Object` 实例，筛选 GameObject/ScriptableObject，读取名称、InstanceID、托管类型等信息 |
+| **动态 Field Offset（IL2CPP）** | 基于 `metadataRegistration + fieldOffsetsPtr` 解析运行时字段偏移，提供 `TryGetFieldOffset` / `GetFieldOffsetOr` 薄封装 |
 | **Transform / Camera / W2S** | 解析 Transform 层级得到世界坐标；读取相机视图投影矩阵并完成世界坐标到屏幕坐标转换 |
 | **Bones** | 遍历 Transform 子树获取骨骼索引、名称与世界坐标 |
 | **IL2CPP Metadata + Hint 导出** | 自动扫描 metadata header、导出 `global-metadata.dat`，并可生成 `*.hint.json` |
@@ -58,12 +60,15 @@
 | 模块 | 代表 API | 说明 |
 |:----|:---------|:-----|
 | **上下文 / AutoInit** | `AutoInit()` / `IsInited()` | 自动发现 Unity 进程、刷新 `g_ctx` |
+|  | `SetContextBackend()` | 切换上下文后端，默认使用 `WinApiContextBackend` |
 |  | `ReadPtr(addr)` / `ReadValue<T>(addr)` | 基于 `g_ctx + Mem()` 的统一读内存封装 |
 | **GOM** | `GomManager()` / `GomBucketsPtr()` / `FindGameObjectThroughTag(tag)` | 访问 GameObjectManager、遍历桶并按 tag 搜索 |
 |  | `EnumerateGameObjects()` / `GetGameObjectByName(name)` | 列举 GameObject，或按名称精确查找 |
 | **MSID** | `MsIdToPointerSlotVa()` / `MsIdCount()` | 读取 ms_id_to_pointer set 元数据 |
 |  | `FindObjectsOfTypeAll(ns, name)` | 枚举或按命名空间+类型名查找 `UnityEngine.Object` 实例 |
 | **ClassMap (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` / `FindClass(fullName)` | 初始化/查询 IL2CPP 类型表；`fullName` 需传完整名（如 `UnityEngine.Transform`） |
+| **FieldOffset (IL2CPP)** | `SupportsDynamicFieldOffsets()` / `TryGetFieldOffset(type, field, out)` | 基于 metadata 动态解析字段偏移 |
+|  | `GetFieldOffsetOr(type, field, fallback)` | 查询失败时返回 fallback，适合平滑替换硬编码偏移 |
 | **对象/名称** | `ReadGameObjectName(nativeGo)` | 读取 Native/Managed 对象名称 |
 | **Transform / Camera / W2S** | `GetTransformWorldPosition(transformPtr)` | 解析层级状态，输出世界坐标 |
 |  | `FindMainCamera()` / `GetCameraMatrix(nativeCamera)` | 找主相机、读取视图投影矩阵 |
@@ -81,10 +86,11 @@
 | **上下文** | `Pid()` | 返回目标进程 PID |
 |  | `IsInited()` | 是否已初始化 |
 |  | `Runtime()` | 返回 Backend 类型 (IL2CPP/Mono) |
+|  | `SetContextBackend(backend)` | 切换上下文 backend，默认使用 WinAPI |
 |  | `UnityPlayerBase()` | 返回 UnityPlayer.dll 基址 |
 |  | `GomGlobalSlotVa()` | 返回 GOM 全局槽虚拟地址 |
 |  | `MsIdToPointerSlotVa()` | 返回 MSID 槽虚拟地址 |
-|  | `Mem()` | 返回内存访问器 `WinApiMemoryAccessor` |
+|  | `Mem()` | 返回内存访问器 `const IMemoryAccessor&` |
 |  | `Off()` | 返回核心偏移量结构 `Offsets` |
 |  | `GomOff()` | 返回 GOM 偏移量结构 `GomOffsets` |
 |  | `CamOff()` | 返回相机偏移量结构 `CameraOffsets` |
@@ -95,6 +101,10 @@
 |  | `FindClassIndex(fullName)` | 通过完整类型名获取 byval 索引 |
 |  | `FindClassByIndex(idx)` | 通过 byval 索引获取 `Il2CppClass*` |
 |  | `FindClass(fullName)` | 通过完整类型名获取 `Il2CppClass*` |
+| **FieldOffset (IL2CPP)** | `SupportsDynamicFieldOffsets()` | 当前 runtime 是否支持 metadata 动态字段偏移 |
+|  | `EnsureFieldOffsetsInited()` | 初始化动态字段偏移缓存 |
+|  | `TryGetFieldOffset(type, field, out)` | 查询字段偏移 |
+|  | `GetFieldOffsetOr(type, field, fallback)` | 查询失败返回 fallback |
 | **GameObject** | `EnumerateGameObjects()` | 枚举所有 GameObject，返回 `optional<vector<GameObjectEntry>>` |
 |  | `FindGameObjectThroughTag(tag)` | 按 Tag 查找第一个 GameObject，返回 `uintptr_t` |
 |  | `GetGameObjectByName(name)` | 按名称查找所有同名 GameObject，返回 `vector<uintptr_t>` |
@@ -123,6 +133,14 @@
 - **平台**：Windows x64
 - **链接方式**：静态运行时（/MT）
 - **第三方库**：需要 [GLM](https://github.com/g-truc/glm)（用于矩阵运算），请自行下载并配置 include 路径
+
+---
+
+## 验证工程
+
+- `tests/winapi_smoke` 提供独立的 WinAPI 冒烟工程，默认使用 PCH、`Release|x64` 配置。
+- 当前已验证 `AutoInit + GOM/MSID scan + GetGameObjectByName + IL2CPP 动态 Field Offset` 这条主链路。
+- 测试工程的 `bin/`、`obj/` 等编译产物已加入 `.gitignore`，仓库只保留源码与工程文件。
 
 ---
 
@@ -188,11 +206,21 @@ int main()
         }
     }
 
-    // 按名称查找游戏对象
-    auto controller = er2::GetGameObjectByName("Controller");
-    if (controller) 
+    // IL2CPP 下可直接查询动态字段偏移
+    if (er2::SupportsDynamicFieldOffsets())
     {
-        printf("Controller: 0x%llX\n", (unsigned long long)controller);
+        std::uint32_t cachedPtrOffset = 0;
+        if (er2::TryGetFieldOffset("UnityEngine.Object", "m_CachedPtr", cachedPtrOffset))
+        {
+            printf("UnityEngine.Object::m_CachedPtr = 0x%X\n", cachedPtrOffset);
+        }
+    }
+
+    // 按名称查找游戏对象
+    auto mainCamera = er2::GetGameObjectByName("Main Camera");
+    if (!mainCamera.empty())
+    {
+        printf("Main Camera: 0x%llX\n", (unsigned long long)mainCamera.front());
     }
 
     return 0;

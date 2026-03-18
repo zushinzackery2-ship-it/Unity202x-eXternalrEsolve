@@ -27,7 +27,7 @@ inline bool IsValidRemotePtrRange(std::uintptr_t p)
 inline bool FindGameAssemblyDataSection(std::uintptr_t base, std::uintptr_t size, std::uintptr_t& outBase, std::uintptr_t& outSize)
 {
     (void)size;
-    auto mem = Mem();
+    const IMemoryAccessor& mem = Mem();
 
     IMAGE_DOS_HEADER dos = {};
     if (!mem.Read(base, &dos, sizeof(dos)))
@@ -158,7 +158,6 @@ inline bool IsTypeInfoTableCandidate(const IMemoryAccessor& mem, std::uintptr_t 
         ++matchedCount;
     }
     return nonZeroCount >= 2 && matchedCount >= 2 && hasStrongAnchor;
-    return nonZeroCount != 0 && matchedCount != 0;
 }
 
 inline bool InitIl2CppTypeInfoInternal()
@@ -180,7 +179,7 @@ inline bool InitIl2CppTypeInfoInternal()
     if (!g_ctx.gameAssembly.base)
     {
         ModuleInfo ga;
-        if (!GetRemoteModuleInfo(g_ctx.pid, L"GameAssembly.dll", ga) || !ga.base)
+        if (!GetContextModuleInfo(g_ctx.pid, L"GameAssembly.dll", ga) || !ga.base)
         {
             return false;
         }
@@ -191,7 +190,7 @@ inline bool InitIl2CppTypeInfoInternal()
         g_ctx.gameAssembly.size = 0x20000000u;
     }
 
-    auto mem = Mem();
+    const IMemoryAccessor& mem = Mem();
 
     MetadataHint hint;
     if (!BuildMetadataHintTScore(mem, g_ctx.gameAssembly.base, g_ctx.pid, L"", L"GameAssembly.dll", hint))
@@ -432,7 +431,7 @@ inline std::uintptr_t FindClassByIndex(std::int32_t idx)
         return 0;
     }
 
-    auto mem = Mem();
+    const IMemoryAccessor& mem = Mem();
 
     std::uintptr_t entry = 0;
     if (!mem.Read(g_ctx.typeInfoTable + static_cast<std::uintptr_t>(uidx) * 8u, &entry, sizeof(entry)))
