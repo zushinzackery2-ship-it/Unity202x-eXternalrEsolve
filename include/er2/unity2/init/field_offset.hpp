@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -469,3 +469,4 @@ inline std::uintptr_t FieldOffsetsTableVa()
 }
 
 } // namespace er2
+

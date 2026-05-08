@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <algorithm>
 #include <cstdint>
@@ -13,8 +13,8 @@
 #include "../dumpsdk/sdk_metadata_helpers.hpp"
 
 #include "../metadata/export.hpp"
-#include "../metadata/hint_export.hpp"
-#include "../metadata/metadata_header_fields.hpp"
+#include "../metadata/hint/hint_export.hpp"
+#include "../metadata/header/metadata_header_fields.hpp"
 
 namespace er2
 {
@@ -459,3 +459,4 @@ inline std::uintptr_t FindClass(const std::string& fullName)
 }
 
 } // namespace er2
+

@@ -8,6 +8,7 @@
 *.userosscache
 *.sln.docstates
 *.ipch
+*.aps
 
 # Build outputs
 [Bb]in/
@@ -22,8 +23,27 @@
 *.tlog
 *.lastbuildstate
 *.recipe
-vcpkg.applocal.log
+*.log
+*.lib
+*.exp
+*.exe
+*.dll
 
 # Test build outputs
 tests/**/bin/
 tests/**/obj/
+
+# Cache files
+*.cache
+*.FileListAbsolute.txt
+
+# VS Code
+.vscode/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Compile commands
+compile_commands.json

@@ -129,3 +129,4 @@ struct DumpSdk6MethodDefFull
 };
 
 } // namespace er2
+

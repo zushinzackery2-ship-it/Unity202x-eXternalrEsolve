@@ -18,8 +18,6 @@
 
 #include "../gom/gom_list_node.hpp"
 
-#include "../gom/gom_search_game_object.hpp"
-
 #include "../object/native/native_game_object_name.hpp"
 
 
@@ -345,4 +343,5 @@ inline std::vector<std::uintptr_t> GetGameObjectByName(const std::string& name)
 
 
 } // namespace er2
+
 

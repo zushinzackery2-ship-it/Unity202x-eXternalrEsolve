@@ -318,3 +318,4 @@ inline bool EnumerateGameObjects(const IMemoryAccessor& mem, std::uintptr_t gomG
 
 } // namespace er2
 
+

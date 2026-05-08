@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -157,3 +157,4 @@ inline bool FindMsIdToPointerSlotVaByScan(
 }
 
 } // namespace er2
+

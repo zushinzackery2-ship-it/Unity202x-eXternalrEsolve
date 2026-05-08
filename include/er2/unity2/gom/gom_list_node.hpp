@@ -78,3 +78,4 @@ inline bool GetListNodeFirst(const IMemoryAccessor& mem, std::uintptr_t listHead
 
 } // namespace er2
 
+

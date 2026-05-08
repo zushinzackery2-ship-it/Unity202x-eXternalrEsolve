@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "../../mem/memory_read.hpp"
-#include "../metadata/metadata_header_fields.hpp"
+#include "../metadata/header/metadata_header_fields.hpp"
 #include "sdk_common.hpp"
 #include "sdk_metadata_helpers.hpp"
 #include "sdk_strings.hpp"
@@ -394,3 +394,4 @@ private:
 };
 
 } // namespace er2
+

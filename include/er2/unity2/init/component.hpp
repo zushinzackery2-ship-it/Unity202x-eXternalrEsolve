@@ -222,3 +222,4 @@ inline std::vector<std::uintptr_t> GetAllComponents(std::uintptr_t gameObjectNat
 
 } // namespace er2
 
+

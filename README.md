@@ -148,7 +148,7 @@
 <summary><strong>目录结构</strong></summary>
 
 ```
-External-oldVersion4Unity202x/
+External202x-eXternalrEsolve/
 ├── Resolve202x.hpp             # 统一入口头文件
 ├── include/
 │   └── er2/
@@ -162,10 +162,15 @@ External-oldVersion4Unity202x/
 │           ├── gom/            # GameObjectManager
 │           ├── init/           # AutoInit 封装层
 │           ├── metadata/       # IL2CPP 元数据
+│           │   ├── header/     # Header 解析
+│           │   ├── registration/ # Registration 扫描
+│           │   ├── hint/       # Hint 系统
+│           │   └── codegen/    # CodeGen 模块
 │           ├── msid/           # InstanceID 映射
 │           ├── object/         # Native/Managed 对象
 │           ├── transform/      # Transform 世界坐标
 │           └── util/           # 工具函数
+├── tests/                      # 测试工程
 ├── Analysis/
 │   ├── Algorithms/             # 算法说明文档
 │   └── Structures/             # 结构说明文档

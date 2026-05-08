@@ -1,12 +1,13 @@
-#pragma once
+﻿#pragma once
 
-#include <Windows.h>
+#include "../../os/win/win_include.hpp"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 
 #include "../../mem/memory_accessor.hpp"
+#include "../../os/win/win_handle.hpp"
 #include "../../os/win/win_memory_accessor.hpp"
 #include "../../os/win/win_module.hpp"
 #include "../../os/win/win_process.hpp"
@@ -56,45 +57,37 @@ public:
 class WinApiContextBackend final : public IContextBackend
 {
 public:
-    ~WinApiContextBackend() override
-    {
-        Reset();
-    }
+    ~WinApiContextBackend() override = default;
 
     bool Attach(std::uint32_t pid) override
     {
         Reset();
 
-        HANDLE process = OpenProcessForRead(pid);
-        if (!process)
+        WinHandle process(OpenProcessForRead(pid));
+        if (!process.IsValid())
         {
             return false;
         }
 
-        m_process = process;
-        m_memoryAccessor = std::make_shared<WinApiMemoryAccessor>(m_process);
+        m_process = std::move(process);
+        m_memoryAccessor = std::make_shared<WinApiMemoryAccessor>(m_process.Get());
         return true;
     }
 
     void Reset() override
     {
         m_memoryAccessor.reset();
-
-        if (m_process)
-        {
-            CloseHandle(m_process);
-            m_process = nullptr;
-        }
+        m_process.Close();
     }
 
     bool IsAttached() const override
     {
-        return m_process != nullptr && static_cast<bool>(m_memoryAccessor);
+        return m_process.IsValid() && static_cast<bool>(m_memoryAccessor);
     }
 
     HANDLE GetProcessHandle() const override
     {
-        return m_process;
+        return m_process.Get();
     }
 
     const IMemoryAccessor* GetMemoryAccessor() const override
@@ -108,7 +101,7 @@ public:
     }
 
 private:
-    HANDLE m_process = nullptr;
+    WinHandle m_process;
     std::shared_ptr<WinApiMemoryAccessor> m_memoryAccessor;
 };
 
@@ -120,3 +113,4 @@ inline ContextBackendPtr CreateDefaultContextBackend()
 }
 
 } // namespace er2
+

@@ -1,0 +1,58 @@
+---
+Language: Cpp
+BasedOnStyle: Microsoft
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+BreakBeforeBraces: Allman
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortBlocksOnASingleLine: Empty
+AllowShortEnumsOnASingleLine: false
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Empty
+AlwaysBreakTemplateDeclarations: Yes
+BreakConstructorInitializers: BeforeComma
+BreakAfterJavaFieldAnnotations: false
+BreakStringLiterals: true
+SortIncludes: true
+SortUsingDeclarations: true
+IncludeBlocks: Regroup
+IncludeCategories:
+  # Windows.h should be first
+  - Regex: '^<Windows\.h>$'
+    Priority: 1
+  # System headers
+  - Regex: '^<.*\.h>$'
+    Priority: 2
+  # C++ standard library
+  - Regex: '^<.*>$'
+    Priority: 3
+  # Project headers
+  - Regex: '^".*"$'
+    Priority: 4
+NamespaceIndentation: None
+FixNamespaceComments: true
+PointerAlignment: Left
+ReferenceAlignment: Left
+SpacesBeforeTrailingComments: 1
+SpacesInParentheses: false
+SpacesInAngles: false
+SpaceAfterCStyleCast: false
+SpaceBeforeParens: ControlStatements
+SpaceBeforeRangeBasedForLoopColon: true
+SpaceInEmptyParentheses: false
+SpacesInSquareBrackets: false
+AlignAfterOpenBracket: Align
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands: Align
+AlignTrailingComments: true
+BinPackArguments: true
+BinPackParameters: true
+DerivePointerAlignment: false
+DisableFormat: false
+...
