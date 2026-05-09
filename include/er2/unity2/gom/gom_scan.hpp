@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <algorithm>
 #include <array>
@@ -11,27 +11,23 @@
 #include <cstring>
 #include <string>
 #include <vector>
-
 #include "../../mem/memory_read.hpp"
 #include "../../os/win/win_memory_accessor.hpp"
 #include "../../os/win/win_module.hpp"
 #include "../metadata/pe.hpp"
 #include "gom_scan_validate.hpp"
-
 #include "scan_pattern.hpp"
 #include "scan_chain.hpp"
 #include "scan_heuristic.hpp"
 
 namespace er2
 {
-
 inline std::uintptr_t FindGomGlobalSlotByScanInternal(const IMemoryAccessor& mem, std::uintptr_t moduleBase, std::size_t chunkSize, const GomOffsets& off)
 {
     const std::uint64_t tTotalBegin = GomScanNowMs();
     GomScanLog("scan_internal.begin moduleBase=0x%llX chunkSize=0x%zX",
         static_cast<unsigned long long>(moduleBase),
         chunkSize);
-
     if (!moduleBase)
     {
         GomScanLog("scan_internal.fail reason=module_base_zero");
@@ -98,7 +94,6 @@ inline bool FindGomGlobalSlotRvaByScan(
     std::size_t chunkSize = 0x20000)
 {
     outRva = 0;
-
     if (!moduleName || !moduleName[0])
     {
         return false;

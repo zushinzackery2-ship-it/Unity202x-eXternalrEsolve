@@ -45,6 +45,7 @@ struct Context
     std::unordered_map<std::string, std::uint32_t> fullNameToByval;
 };
 
+// NOTE: Not thread-safe. All access must occur on a single thread.
 inline Context g_ctx;
 
 } // namespace er2

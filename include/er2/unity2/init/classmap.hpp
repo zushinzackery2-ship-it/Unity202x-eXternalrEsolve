@@ -9,6 +9,7 @@
 
 #include "context.hpp"
 
+#include "../metadata/pe.hpp"
 #include "../dumpsdk/sdk_common.hpp"
 #include "../dumpsdk/sdk_metadata_helpers.hpp"
 
@@ -29,44 +30,19 @@ inline bool FindGameAssemblyDataSection(std::uintptr_t base, std::uintptr_t size
     (void)size;
     const IMemoryAccessor& mem = Mem();
 
-    IMAGE_DOS_HEADER dos = {};
-    if (!mem.Read(base, &dos, sizeof(dos)))
-    {
-        return false;
-    }
-    if (dos.e_magic != IMAGE_DOS_SIGNATURE)
-    {
-        return false;
-    }
-
-    DWORD ntOffset = static_cast<DWORD>(dos.e_lfanew);
-    IMAGE_NT_HEADERS64 nt = {};
-    if (!mem.Read(base + ntOffset, &nt, sizeof(nt)))
-    {
-        return false;
-    }
-    if (nt.Signature != IMAGE_NT_SIGNATURE)
+    std::uint32_t sizeOfImage = 0;
+    std::vector<ModuleSection> sections;
+    if (!ReadModuleSections(mem, base, sizeOfImage, sections))
     {
         return false;
     }
 
-    WORD numberOfSections = nt.FileHeader.NumberOfSections;
-    DWORD sizeOfOptionalHeader = nt.FileHeader.SizeOfOptionalHeader;
-    std::uintptr_t sectionHeaders = base + ntOffset + sizeof(DWORD) + sizeof(IMAGE_FILE_HEADER) + sizeOfOptionalHeader;
-
-    for (WORD i = 0; i < numberOfSections; ++i)
+    for (const auto& sec : sections)
     {
-        IMAGE_SECTION_HEADER sh = {};
-        if (!mem.Read(sectionHeaders + static_cast<std::uintptr_t>(i) * sizeof(IMAGE_SECTION_HEADER), &sh, sizeof(sh)))
+        if (sec.name == ".data")
         {
-            continue;
-        }
-
-        if (sh.Name[0] == '.' && sh.Name[1] == 'd' && sh.Name[2] == 'a' && sh.Name[3] == 't' && sh.Name[4] == 'a')
-        {
-            outBase = base + sh.VirtualAddress;
-            std::uintptr_t vs = sh.Misc.VirtualSize ? sh.Misc.VirtualSize : sh.SizeOfRawData;
-            outSize = vs;
+            outBase = base + static_cast<std::uintptr_t>(sec.rva);
+            outSize = static_cast<std::uintptr_t>(sec.size);
             return true;
         }
     }
@@ -338,7 +314,8 @@ inline bool InitIl2CppTypeInfoInternal()
             {
                 for (std::size_t off = 0; off + sizeof(std::uintptr_t) <= sz; off += sizeof(std::uintptr_t))
                 {
-                    const std::uintptr_t ptr = *reinterpret_cast<const std::uintptr_t*>(buf.data() + off);
+                    std::uintptr_t ptr = 0;
+                    std::memcpy(&ptr, buf.data() + off, sizeof(ptr));
                     if (IsTypeInfoTableCandidate(mem, ptr, offRef, sampleByvals, sampleNames))
                     {
                         return ptr;

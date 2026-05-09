@@ -36,6 +36,7 @@ struct RuntimeState
     std::unordered_set<std::string> knownTypes;
 };
 
+// NOTE: Not thread-safe. All access must occur on a single thread.
 inline RuntimeState g_fieldOffsetState;
 
 inline void ResetRuntimeState()
