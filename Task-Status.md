@@ -1,26 +1,20 @@
 # Task-Status
 
-## 当前任务 / 待修清单
+## 待办
 
-（无）
+- [ ] scan1 全进程扫描(~3s)，后续可缩窄到 MEM_PRIVATE 页
+- [ ] ScriptableObjectName 偏移兼容性（0x38 对部分 Unity 版本无效，低优先级）
 
 ## 已完成
 
-- 完整 Review 输出报告
-- codeindex 核对确认全部待修项
-- reinterpret_cast UB → memcpy（classmap.hpp + enumerate_objects.hpp 4处）
-- FindGameAssemblyDataSection 复用 ReadModuleSections 消除重复 PE 解析
-- validate_dlist.hpp maxSteps 已回滚（大场景 20w+ GO 会被误杀）
-- gom_walker.hpp 节点读取合并为单次 24 字节 RPM（3→2 RPM/node）
-- g_ctx / g_fieldOffsetState 加单线程约束注释
-- 25 个文件格式化去除空行膨胀（总计 -2317 行 / +227 行）
-- 纯算法单元测试（hash / W2S / QuatRotateSIMD）全部通过
+- Smoke test 全覆盖：Mono 33 PASS/6 SKIP，IL2CPP 46 PASS/4 SKIP，0 FAIL
+- IL2CPP klassmap 验证：FindClassIndex/FindClass/FindClassByIndex + m_CachedPtr cross-validate 通过
+- GOM new_chain 优化：25s→5.4s（seed→表头→scan1→scan2）
+- 代码质量：UB 修复、PE 解析复用、格式化(-2317行)、单元测试通过
 - 已 push 到 Re-Arch 分支
-- AutoInit GOM 扫描优化：level1 改为 MEM_PRIVATE 可写页指针对齐扫描并命中即验证；level2 改为只扫 UnityPlayer `.data/.rdata`
 
-## 经验 / 高价值发现
+## 经验
 
-- 硬编码偏移（bones/camera/msid）是正确的，无需改动
-- sdk_type_resolver.hpp 实际 397 行（15K 是字节），大小合理无需拆分
-- FindGameAssemblyDataSection 手动解析 PE section，可用已有的 ReadModuleSections + .data 过滤替代
-- ValidateCircularDList 用 Floyd 环检测，逻辑正确；硬编码 maxSteps 会误杀 20w+ GO 大场景，已回滚
+- EnumerateGameObjects 首条目可能 name 不可读（local list 的 GO 没有 name），fallback 需遍历尝试
+- IL2CPP m_CachedPtr offset=0x10 是稳定的，可用于 native↔managed 互验
+- FindMainCamera 需要 Camera component，tag=5 GO 存在但没 Camera 时返回 0（场景依赖）

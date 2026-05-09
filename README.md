@@ -1,10 +1,10 @@
 <div align="center">
 
-# eXternalrEsolve202x
+# er2 — Unity Runtime Structure Resolver
 
-**Unity 2020-2023 运行时内存结构算法还原库（er2 / header-only）**
+**Cross-process runtime introspection framework for Unity 2020–2023 (Windows x64)**
 
-*跨进程读取 | Header-Only | IL2CPP/MONO*
+*Header-only C++17 · No symbols/RTTI required · Mono & IL2CPP*
 
 ![C++](https://img.shields.io/badge/C%2B%2B-17-blue?style=flat-square)
 ![Platform](https://img.shields.io/badge/Platform-Windows%20x64-lightgrey?style=flat-square)
@@ -14,175 +14,163 @@
 
 ---
 
-> [!CAUTION]
-> **免责声明**  
-> 本项目仅用于学习研究 Unity 引擎内部结构与算法还原，以及在合法授权前提下的游戏 Modding/插件开发学习与验证，不得用于任何违反游戏服务条款或法律法规的行为。  
-> 使用本项目产生的一切后果由使用者自行承担，作者不承担任何责任。  
-> 请在合法合规的前提下使用本项目。
+## What This Project Does
 
-> [!NOTE]
-> **版本兼容性说明**  
-> 本项目面向 Unity 2020~2023（Windows x64）。对比 Unity2020 更早版本在部分结构偏移与布局上存在差异。  
-> 支持 Mono 与 IL2CPP 两种后端（AutoInit 自动识别）。   
-> Unity6版本请移步至仓库:https://github.com/zushinzackery2-ship-it/Unity6-eXternalrEsolve   
+er2 is a **pure-algorithmic library** that reconstructs Unity engine runtime data structures from a live process's memory — **without debug symbols, RTTI, or source code access**.
 
-> [!IMPORTANT]
-> **代码重构说明**  
-> 当前项目包含'**相当大量**'的AI重构代码，可能存在大量维护性问题。  
-> 功能实现集中在 `include/er2`，入口侧尽量保持薄封装。
+Given only a process handle and a raw memory read primitive, er2 can:
 
-## 访问器
+- **Discover and validate** the engine's internal object management structures (hash-bucketed doubly-linked lists)
+- **Reconstruct the IL2CPP type system** from in-memory metadata, resolving class hierarchies and field offsets at runtime
+- **Traverse managed↔native object bridges** to map between .NET managed objects and their C++ native counterparts
+- **Parse hierarchical spatial data** (transform trees, projection matrices) from opaque binary layouts
 
-- **最小内存访问抽象**：以 `IMemoryAccessor` 为核心，算法层只依赖读内存接口。
-- **Windows 适配**：默认提供 WinAPI 实现（`ReadProcessMemory`）适配器。
-- **Header-only**：纯头文件库。
+The core contribution is the set of **heuristic scanning and structural validation algorithms** that make this possible without any prior knowledge of the target binary's symbol table.
 
-## 功能概览
-
-| 功能 | 说明 |
-|:-----|:-----|
-| **AutoInit + 上下文管理** | 自动发现 Unity 进程、定位 UnityPlayer/GameAssembly (IL2CPP) 或 Mono 模块、缓存关键 offset/全局槽，并暴露 `g_ctx + Mem()` 读写入口 |
-| **Backend 抽象** | 以 `IContextBackend` 为核心抽象进程句柄、模块查询与内存访问，默认提供 `WinApiContextBackend`，后续可平滑扩展 Driver backend |
-| **跨进程内存访问** | 以 `IMemoryAccessor` 为核心，算法层统一依赖 `const IMemoryAccessor&`，默认提供 WinAPI 适配 |
-| **GOM 扫描与遍历** | 盲扫 GameObjectManager、校验桶结构、枚举 GameObject/组件，支持按 tag/名称/组件类型快速搜索 |
-| **MSID 全局注册表** | 枚举 `UnityEngine.Object` 实例，筛选 GameObject/ScriptableObject，读取名称、InstanceID、托管类型等信息 |
-| **动态 Field Offset（IL2CPP）** | 基于 `metadataRegistration + fieldOffsetsPtr` 解析运行时字段偏移，提供 `TryGetFieldOffset` / `GetFieldOffsetOr` 薄封装 |
-| **Transform / Camera / W2S** | 解析 Transform 层级得到世界坐标；读取相机视图投影矩阵并完成世界坐标到屏幕坐标转换 |
-| **Bones** | 遍历 Transform 子树获取骨骼索引、名称与世界坐标 |
-| **IL2CPP Metadata + Hint 导出** | 自动扫描 metadata header、导出 `global-metadata.dat`，并可生成 `*.hint.json` |
-| **DumpSDK2 工具链** | 结合 metadata/hint 结果生成 C# API 描述与泛型结构信息，辅助离线分析/SDK 导出 |
-| **模块化 Header-only 设计** | `er2/unity2/*` 下分门别类的子模块（gom/msid/object/camera/transform/metadata 等），可按需引用 |
+> **Compatibility:** Unity 2020–2023 on Windows x64, both Mono and IL2CPP backends (auto-detected).  
+> For Unity 6 support, see [Unity6-eXternalrEsolve](https://github.com/zushinzackery2-ship-it/Unity6-eXternalrEsolve).
 
 ---
 
-## 核心 API 列表
+## Technical Highlights
 
-| 模块 | 代表 API | 说明 |
-|:----|:---------|:-----|
-| **上下文 / AutoInit** | `AutoInit()` / `IsInited()` | 自动发现 Unity 进程、刷新 `g_ctx` |
-|  | `SetContextBackend()` | 切换上下文后端，默认使用 `WinApiContextBackend` |
-|  | `ReadPtr(addr)` / `ReadValue<T>(addr)` | 基于 `g_ctx + Mem()` 的统一读内存封装 |
-| **GOM** | `GomManager()` / `GomBucketsPtr()` / `FindGameObjectThroughTag(tag)` | 访问 GameObjectManager、遍历桶并按 tag 搜索 |
-|  | `EnumerateGameObjects()` / `GetGameObjectByName(name)` | 列举 GameObject，或按名称精确查找 |
-| **MSID** | `MsIdToPointerSlotVa()` / `MsIdCount()` | 读取 ms_id_to_pointer set 元数据 |
-|  | `FindObjectsOfTypeAll(ns, name)` | 枚举或按命名空间+类型名查找 `UnityEngine.Object` 实例 |
-| **ClassMap (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` / `FindClass(fullName)` | 初始化/查询 IL2CPP 类型表；`fullName` 需传完整名（如 `UnityEngine.Transform`） |
-| **FieldOffset (IL2CPP)** | `SupportsDynamicFieldOffsets()` / `TryGetFieldOffset(type, field, out)` | 基于 metadata 动态解析字段偏移 |
-|  | `GetFieldOffsetOr(type, field, fallback)` | 查询失败时返回 fallback，适合平滑替换硬编码偏移 |
-| **对象/名称** | `ReadGameObjectName(nativeGo)` | 读取 Native/Managed 对象名称 |
-| **Transform / Camera / W2S** | `GetTransformWorldPosition(transformPtr)` | 解析层级状态，输出世界坐标 |
-|  | `FindMainCamera()` / `GetCameraMatrix(nativeCamera)` | 找主相机、读取视图投影矩阵 |
-| **Metadata / Hint** | `ExportGameAssemblyMetadataByScore()` | 一次性导出 metadata bytes 与 hint json |
-| **DumpSDK2** | `DumpSdk` 相关接口 | 生成 C# API 与泛型结构描述 |
+### Blind Pointer-Chain Scanning
 
----
+The engine's central object manager is located through a **multi-stage pointer chain scan** with no hardcoded addresses:
 
-## AutoInit 后可直接调用的 API
+1. **Seed scan** — full address space pattern match finds heap objects containing a known structural signature (bucket stride + alignment)
+2. **Table head derivation** — walks backward from the seed to locate the hash table base
+3. **Two-level global resolution** — cascading pattern scans narrow from heap → data section → global slot, with candidate scoring at each stage
 
-调用 `er2::AutoInit()` 成功后，以下 API 可直接使用，无需手动传递 mem/offsets 等参数。
+Each candidate is validated by structural checks (circular doubly-linked list integrity via **Floyd's cycle detection**, bucket consistency, pointer range heuristics) rather than signature matching, making the approach resilient to compiler/version changes.
 
-| 分类 | API | 说明 |
-|:-----|:----|:-----|
-| **上下文** | `Pid()` | 返回目标进程 PID |
-|  | `IsInited()` | 是否已初始化 |
-|  | `Runtime()` | 返回 Backend 类型 (IL2CPP/Mono) |
-|  | `SetContextBackend(backend)` | 切换上下文 backend，默认使用 WinAPI |
-|  | `UnityPlayerBase()` | 返回 UnityPlayer.dll 基址 |
-|  | `GomGlobalSlotVa()` | 返回 GOM 全局槽虚拟地址 |
-|  | `MsIdToPointerSlotVa()` | 返回 MSID 槽虚拟地址 |
-|  | `Mem()` | 返回内存访问器 `const IMemoryAccessor&` |
-|  | `Off()` | 返回核心偏移量结构 `Offsets` |
-|  | `GomOff()` | 返回 GOM 偏移量结构 `GomOffsets` |
-|  | `CamOff()` | 返回相机偏移量结构 `CameraOffsets` |
-|  | `TransformOff()` | 返回 Transform 偏移量结构 `TransformOffsets` |
-|  | `ReadPtr(addr)` | 读取指针，返回 `optional<uintptr_t>` |
-|  | `ReadValue<T>(addr)` | 读取任意类型值，返回 `optional<T>` |
-| **ClassMap (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` | 初始化并校验 `typeInfoTable` |
-|  | `FindClassIndex(fullName)` | 通过完整类型名获取 byval 索引 |
-|  | `FindClassByIndex(idx)` | 通过 byval 索引获取 `Il2CppClass*` |
-|  | `FindClass(fullName)` | 通过完整类型名获取 `Il2CppClass*` |
-| **FieldOffset (IL2CPP)** | `SupportsDynamicFieldOffsets()` | 当前 runtime 是否支持 metadata 动态字段偏移 |
-|  | `EnsureFieldOffsetsInited()` | 初始化动态字段偏移缓存 |
-|  | `TryGetFieldOffset(type, field, out)` | 查询字段偏移 |
-|  | `GetFieldOffsetOr(type, field, fallback)` | 查询失败返回 fallback |
-| **GameObject** | `EnumerateGameObjects()` | 枚举所有 GameObject，返回 `optional<vector<GameObjectEntry>>` |
-|  | `FindGameObjectThroughTag(tag)` | 按 Tag 查找第一个 GameObject，返回 `uintptr_t` |
-|  | `GetGameObjectByName(name)` | 按名称查找所有同名 GameObject，返回 `vector<uintptr_t>` |
-| **组件** | `GetAllComponents(go)` | 获取 GameObject 的所有组件，返回 `vector<uintptr_t>` |
-|  | `GetComponentThroughTypeId(go, typeId)` | 按 TypeId 获取组件 |
-|  | `GetComponentThroughTypeName(go, typeName)` | 按类型名获取组件 |
-|  | `GetTransformComponent(go)` | 获取 Transform 组件 |
-|  | `GetCameraComponent(go)` | 获取 Camera 组件 |
-| **Transform** | `GetTransformWorldPosition(transform)` | 获取 Transform 世界坐标 |
-|  | `GetBoneTransformAll(rootGo)` | 获取骨骼列表 |
-| **相机 / W2S** | `FindMainCamera()` | 查找主相机 |
-|  | `GetCameraMatrix(cam)` | 获取相机 ViewProj 矩阵 |
-|  | `WorldToScreenPoint(viewProj, screen, pos)` | 世界坐标转屏幕坐标 |
-| **MSID** | `FindObjectsOfTypeAll(className)` | 按类名查找所有实例，返回 `vector<FindObjectsOfTypeAllResult>` |
-| **Metadata** | `ExportGameAssemblyMetadataByScore()` | 导出 metadata 字节 |
+### Remote IL2CPP Type System Reconstruction
 
-> **返回值说明**：返回 `optional<T>` 的函数成功时有值，失败时为空；返回 `bool` + out 参数的函数成功返回 true。
-> **FindClass 说明（IL2CPP）**：`FindClass` 不做模糊匹配，参数必须是完整类型名（命名空间+类名），例如 `UnityEngine.Transform`。
+For IL2CPP builds, er2 reconstructs the type information table entirely from process memory:
+
+- Exports and parses the `global-metadata.dat` header from remote memory using a **scoring-based heuristic** (no file path assumption)
+- Builds a `byval_arg → class name` mapping from metadata bytes
+- Locates the `Il2CppClass*[]` pointer table by sampling known types and verifying name round-trips
+- Resolves **runtime field offsets** by walking `metadataRegistration → fieldOffsets` chains, enabling symbol-free struct field access
+
+### Architecture
+
+```
+┌─────────────────────────────────────────┐
+│          Application / Tests            │
+├─────────────────────────────────────────┤
+│         init/* (thin wrappers)          │  ← Global-context convenience layer
+├──────┬──────┬───────┬───────┬───────────┤
+│ gom/ │ msid/│object/│camera/│ metadata/ │  ← Domain-specific algorithms
+│      │      │       │transf/│ dumpsdk/  │
+├──────┴──────┴───────┴───────┴───────────┤
+│     IMemoryAccessor  (pure interface)   │  ← Platform abstraction boundary
+├─────────────────────────────────────────┤
+│   os/win/  (WinAPI implementation)      │  ← Swappable backend
+└─────────────────────────────────────────┘
+```
+
+- **Zero coupling** — algorithm layer depends only on `const IMemoryAccessor&`, a single-method read interface
+- **Header-only** — all logic in `.hpp` files under `include/er2/`, no link-time dependencies
+- **Backend-swappable** — `IContextBackend` abstracts process handle, module enumeration, and memory access; default is `WinApiContextBackend`
 
 ---
 
-## 编译要求
+## Key Algorithms & Data Structures
 
-- **C++ 标准**：C++17
-- **编译器**：MSVC（Visual Studio 2022）
-- **平台**：Windows x64
-- **链接方式**：静态运行时（/MT）
-- **第三方库**：需要 [GLM](https://github.com/g-truc/glm)（用于矩阵运算），请自行下载并配置 include 路径
+| Algorithm | Where | Purpose |
+|:----------|:------|:--------|
+| **Multi-stage pointer chain scan** | `gom/scan_chain.hpp` | Locates global engine singleton from raw memory without symbols |
+| **Floyd's tortoise-and-hare cycle detection** | `gom/validate_dlist.hpp` | Validates circular doubly-linked lists in untrusted memory |
+| **Heuristic structure scoring** | `gom/manager_score.hpp` | Ranks candidate addresses by structural consistency (list integrity, bucket alignment, pointer range) |
+| **PE section parsing** | `metadata/pe.hpp` | Identifies `.data`/`.rdata` sections to constrain scan ranges |
+| **Metadata header scoring** | `metadata/export.hpp` | Locates IL2CPP metadata blob via statistical header field validation |
+| **Type table brute-force with anchor verification** | `init/classmap.hpp` | Finds `Il2CppClass*[]` table by sampling known type names as anchors |
+| **Quaternion → world-position SIMD pipeline** | `transform/` | Reconstructs world coordinates from hierarchical local transforms |
+| **3D projection (view-projection matrix)** | `camera/` | Extracts camera matrices and performs coordinate space transformations |
 
 ---
 
-## 验证工程
+## API Overview
 
-- `tests/winapi_smoke` 提供独立的 WinAPI 冒烟工程，默认使用 PCH、`Release|x64` 配置。
-- 当前已验证 `AutoInit + GOM/MSID scan + GetGameObjectByName + IL2CPP 动态 Field Offset` 这条主链路。
-- 测试工程的 `bin/`、`obj/` 等编译产物已加入 `.gitignore`，仓库只保留源码与工程文件。
+After a single `er2::AutoInit()` call, all query functions are available through a global context:
+
+| Category | Representative API | Description |
+|:---------|:-------------------|:------------|
+| **Context** | `AutoInit()` / `IsInited()` / `Runtime()` | Process discovery, runtime detection (Mono/IL2CPP) |
+| | `Mem()` / `ReadPtr()` / `ReadValue<T>()` | Abstracted memory access |
+| **Structure Discovery** | `GomManager()` / `GomBucketsPtr()` | Access reconstructed engine object manager |
+| | `EnumerateGameObjects()` / `GetGameObjectByName()` | Object graph traversal and lookup |
+| | `CheckGomManagerCandidate()` | Structural validation with scoring |
+| **Type System (IL2CPP)** | `EnsureIl2CppTypeInfoInited()` / `FindClass()` | Remote type table initialization and class lookup |
+| | `TryGetFieldOffset()` / `GetFieldOffsetOr()` | Runtime field offset resolution from metadata |
+| **Object Introspection** | `GetAllComponents()` / `GetComponentThroughTypeName()` | Component pool traversal |
+| | `GetManagedObjectTypeInfo()` | Managed↔native bridge queries |
+| | `FindObjectsOfTypeAll()` | Type-filtered instance enumeration via global registry |
+| **Spatial Data** | `GetTransformWorldPosition()` | Hierarchical transform chain resolution |
+| | `GetCameraMatrix()` / `WorldToScreenPoint()` | Projection matrix extraction and coordinate transform |
+| | `GetBoneTransformAll()` | Skeletal hierarchy traversal |
+
+> **Return conventions:** functions return `std::optional<T>` on success or provide `bool` + out-parameter overloads.
+
+---
+
+## Build
+
+- **C++17** / MSVC (Visual Studio 2022) / Windows x64 / Static runtime (`/MT`)
+- **Dependencies:** [GLM](https://github.com/g-truc/glm) (matrix math)
+
+---
+
+## Testing
+
+| Suite | Coverage | Status |
+|:------|:---------|:-------|
+| `tests/winapi_smoke` | Full API smoke test against live Unity process | Mono: **33 PASS** · IL2CPP: **46 PASS** · 0 FAIL |
+| `tests/unit` | Pure algorithm unit tests (hash, projection, quaternion rotation) | All passing |
+
+The smoke test covers: context initialization → structure discovery → object enumeration → type system reconstruction → component queries → spatial data extraction → managed object introspection → field offset cross-validation.
 
 ---
 
 <details>
-<summary><strong>目录结构</strong></summary>
+<summary><strong>Directory Layout</strong></summary>
 
 ```
-External202x-eXternalrEsolve/
-├── Resolve202x.hpp             # 统一入口头文件
-├── include/
-│   └── er2/
-│       ├── core/               # 基础类型定义
-│       ├── mem/                # 内存访问抽象
-│       ├── os/win/             # Windows 平台实现
-│       └── unity2/
-│           ├── camera/         # 相机与 W2S
-│           ├── core/           # 偏移定义
-│           ├── dumpsdk/        # SDK 导出
-│           ├── gom/            # GameObjectManager
-│           ├── init/           # AutoInit 封装层
-│           ├── metadata/       # IL2CPP 元数据
-│           │   ├── header/     # Header 解析
-│           │   ├── registration/ # Registration 扫描
-│           │   ├── hint/       # Hint 系统
-│           │   └── codegen/    # CodeGen 模块
-│           ├── msid/           # InstanceID 映射
-│           ├── object/         # Native/Managed 对象
-│           ├── transform/      # Transform 世界坐标
-│           └── util/           # 工具函数
-├── tests/                      # 测试工程
-├── Analysis/
-│   ├── Algorithms/             # 算法说明文档
-│   └── Structures/             # 结构说明文档
-├── tools/                      # 示例工具
-└── docs/                       # 补充文档
+er2/
+├── Resolve202x.hpp                 # Single-include entry point
+├── include/er2/
+│   ├── compat/                     # Compiler/platform compatibility
+│   ├── core/                       # Fundamental types
+│   ├── mem/                        # IMemoryAccessor interface
+│   ├── os/win/                     # Windows platform backend
+│   └── unity2/
+│       ├── camera/                 # Projection matrix extraction
+│       ├── core/                   # Structure offset definitions
+│       ├── dumpsdk/                # SDK/type descriptor export
+│       ├── gom/                    # Object manager scanning & traversal
+│       ├── init/                   # Global-context convenience wrappers
+│       ├── metadata/               # IL2CPP metadata reconstruction
+│       │   ├── header/             #   Header parsing & validation
+│       │   ├── registration/       #   Registration table scanning
+│       │   ├── hint/               #   Heuristic hint system
+│       │   └── codegen/            #   Code generation support
+│       ├── msid/                   # Instance ID registry
+│       ├── object/                 # Object introspection
+│       │   ├── managed/            #   Managed (.NET) object access
+│       │   └── native/             #   Native (C++) object access
+│       ├── transform/              # Transform hierarchy & world coords
+│       └── util/                   # Shared utilities
+└── tests/
+    ├── unit/                       # Algorithm unit tests
+    └── winapi_smoke/               # Integration smoke tests
 ```
 
 </details>
 
 ---
 
-## 快速开始
+## Quick Start
 
 ```cpp
 #include "Resolve202x.hpp"
@@ -190,42 +178,33 @@ External202x-eXternalrEsolve/
 
 int main()
 {
-    // 自动发现 Unity 进程并初始化上下文
     if (!er2::AutoInit())
     {
         return 1;
     }
 
-    // 输出环境信息
-    printf("Runtime: %s\n", er2::Runtime() == er2::ManagedBackend::Il2Cpp ? "IL2CPP" : "Mono");
+    std::printf("Runtime: %s\n",
+        er2::Runtime() == er2::ManagedBackend::Il2Cpp ? "IL2CPP" : "Mono");
 
-    // 查找主相机
-    const std::uintptr_t cam = er2::FindMainCamera();
-    if (cam)
-    {
-        // 获取相机矩阵
-        auto viewProjOpt = er2::GetCameraMatrix(cam);
-        if (viewProjOpt.has_value())
-        {
-            // ...
-        }
-    }
+    // Enumerate all objects of a given type
+    auto transforms = er2::FindObjectsOfTypeAll("UnityEngine", "Transform");
+    std::printf("Transform instances: %zu\n", transforms.size());
 
-    // IL2CPP 下可直接查询动态字段偏移
+    // IL2CPP: resolve field offsets from metadata (no hardcoded values)
     if (er2::SupportsDynamicFieldOffsets())
     {
-        std::uint32_t cachedPtrOffset = 0;
-        if (er2::TryGetFieldOffset("UnityEngine.Object", "m_CachedPtr", cachedPtrOffset))
+        std::uint32_t offset = 0;
+        if (er2::TryGetFieldOffset("UnityEngine.Object", "m_CachedPtr", offset))
         {
-            printf("UnityEngine.Object::m_CachedPtr = 0x%X\n", cachedPtrOffset);
+            std::printf("m_CachedPtr offset = 0x%X\n", offset);
         }
     }
 
-    // 按名称查找游戏对象
-    auto mainCamera = er2::GetGameObjectByName("Main Camera");
-    if (!mainCamera.empty())
+    // IL2CPP: look up class by fully-qualified name
+    const std::uintptr_t klass = er2::FindClass("UnityEngine.Transform");
+    if (klass)
     {
-        printf("Main Camera: 0x%llX\n", (unsigned long long)mainCamera.front());
+        std::printf("Transform class @ 0x%llX\n", (unsigned long long)klass);
     }
 
     return 0;
@@ -234,18 +213,13 @@ int main()
 
 ---
 
-## AutoInit 与 init/* 封装
-
-- `er2::AutoInit()` 会自动定位 Unity 进程并填充全局上下文 `g_ctx`
-- `include/er2/unity2/init/*` 提供基于 `g_ctx + Mem()` 的薄封装，尽量减少手动传参
-
----
-
 <div align="center">
 
-**Platform:** Windows x64 | **License:** MIT
+**Platform:** Windows x64 &nbsp;|&nbsp; **License:** MIT
 
 </div>
+
+> **Disclaimer:** This project is intended for academic study of Unity engine internals, authorized modding/plugin development, and reverse engineering research. Users are responsible for ensuring compliance with applicable laws and terms of service.
 
 
 

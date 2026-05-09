@@ -47,3 +47,12 @@ cmake_install.cmake
 
 # Compile commands
 compile_commands.json
+
+# Windsurf IDE
+.windsurf/
+
+# Internal working docs
+Task-Status.md
+
+# vcpkg applocal
+vcpkg.applocal.log
