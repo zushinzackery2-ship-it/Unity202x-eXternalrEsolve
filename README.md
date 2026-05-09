@@ -25,7 +25,7 @@
 
 ---
 
-## 技术方案
+## 部分实现原理
 
 ### GameObjectManager 盲结构发现
 
@@ -50,13 +50,23 @@ GOM 非导出符号，通过**多级指针链扫描**定位：
 
 ### 逆向还原的结构
 
-| 结构 | 布局 |
-|:-------|:-------|
-| GOM 桶 | stride 0x18，每桶含 list_head / hashmask / key |
-| 链表节点 | prev / next + nativeObject |
-| 组件池 | slot stride 0x10，typeId + nativeComponent |
-| NativeGameObject | managed、componentPool、componentCount、tag、name_ptr |
-| Transform | quaternion + localPosition + parent chain |
+| 结构 | 字段 / 偏移 |
+|:-----|:-----------|
+| **GomManager** | +0x00 buckets_ptr, +0x08 bucket_count, +0x28 local_list_head |
+| **GomBucket** | stride 0x18: +0x00 hashmask, +0x04 info, +0x08 key, +0x10 list_head |
+| **GomListNode** | +0x00 prev, +0x08 next, +0x10 nativeObject |
+| **NativeGameObject** | +0x28 managed, +0x30 componentPool, +0x40 componentCount, +0x54 tag, +0x60 name_ptr |
+| **NativeComponent** | +0x28 managedComponent, +0x30 gameObject, +0x38 enabled |
+| **ComponentPool** | slot stride 0x10: +0x00 typeId, +0x08 nativeComponent |
+| **UnityEngine.Object** | +0x08 instanceID, +0x28 managed_ptr, +0x38 scriptableObject_name_ptr, +0x60 gameObject_name_ptr |
+| **Il2CppClass** | +0x10 name, +0x18 namespace, +0x58 parent |
+| **MonoClass** | +0x48 name, +0x50 namespace, +0x30 parent |
+| **ManagedObject** | +0x00 klass (Il2CppClass*) |
+| **MsIdToPointerSet** | +0x00 entriesBase, +0x08 capacity, +0x0C count |
+| **MsIdToPointerEntry** | stride 0x18: +0x00 hashMask, +0x08 key (instanceID), +0x10 object* |
+| **NativeTransform** | +0x38 hierarchyState_ptr, +0x40 index |
+| **TransformHierarchyState** | +0x18 nodeData, +0x20 parentIndices; node stride 0x30 (localPos + quat + scale) |
+| **NativeCamera** | +0x100 viewProjMatrix (64 bytes, 4×4 float) |
 
 ### 分层架构
 
