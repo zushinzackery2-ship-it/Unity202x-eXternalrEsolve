@@ -58,7 +58,8 @@ GOM 非导出符号，通过**多级指针链扫描**定位：
 | **NativeGameObject** | +0x28 managed, +0x30 componentPool, +0x40 componentCount, +0x54 tag, +0x60 name_ptr |
 | **NativeComponent** | +0x28 managedComponent, +0x30 gameObject, +0x38 enabled |
 | **ComponentPool** | slot stride 0x10: +0x00 typeId, +0x08 nativeComponent |
-| **UnityEngine.Object** | +0x08 instanceID, +0x28 managed_ptr, +0x38 scriptableObject_name_ptr, +0x60 gameObject_name_ptr |
+| **NativeObject (基类)** | +0x08 instanceID, +0x28 managed_ptr |
+| **NativeScriptableObject** | +0x38 name_ptr |
 | **MsIdToPointerSet** | +0x00 entriesBase, +0x08 capacity, +0x0C count |
 | **MsIdToPointerEntry** | stride 0x18: +0x00 hashMask, +0x08 key (instanceID), +0x10 object* |
 | **NativeTransform** | +0x38 hierarchyState_ptr, +0x40 index |
