@@ -16,16 +16,7 @@
 
 ## 项目概述
 
-er2 是一个**纯算法库**，能够从运行中的 Unity 进程内存中**还原引擎运行时数据结构**——不依赖调试符号、RTTI 或源代码。
-
-仅凭一个进程句柄和原始内存读取原语，er2 可以完成：
-
-- **发现与验证**引擎内部的对象管理结构（哈希分桶双向循环链表）
-- **重建 IL2CPP 类型系统**，从进程内存中的 metadata 解析类层次和字段偏移
-- **穿越 Managed↔Native 对象桥接**，在 .NET 托管对象与 C++ 原生对象之间建立映射
-- **解析层级空间数据**（Transform 树、投影矩阵）从不透明的二进制内存布局中提取
-
-项目的核心贡献是一套**启发式扫描与结构验证算法**，使得在完全不了解目标二进制符号表的前提下完成上述工作。
+纯算法库，仅凭跨进程只读内存访问，从运行中的 Unity 进程中还原引擎运行时数据结构——不依赖符号表、RTTI、文件系统或代码注入。
 
 > [!NOTE]
 > **版本兼容性**  
@@ -34,30 +25,38 @@ er2 是一个**纯算法库**，能够从运行中的 Unity 进程内存中**还
 
 ---
 
-## 技术亮点
+## 技术方案
 
-### 盲扫指针链算法
+### GameObjectManager 盲结构发现
 
-引擎的核心对象管理器通过**多级指针链扫描**定位，无任何硬编码地址：
+GOM 非导出符号，通过**多级指针链扫描**定位：
 
-1. **Seed 扫描** — 全地址空间模式匹配，找到堆上包含已知结构特征（桶步长 + 对齐）的对象
-2. **表头推导** — 从 seed 反向回溯，定位哈希表基址
-3. **两级全局解析** — 级联模式扫描从 堆 → `.data` 段 → 全局槽 逐级收窄，每级带候选评分
+1. **Seed** — 全地址空间模式匹配，找到堆上满足桶步长 + 对齐约束的候选
+2. **表头推导** — 从 seed 反向回溯哈希表基址
+3. **两级全局解析** — 堆 → `.data`/`.rdata` → 全局槽，逐级收窄 + 候选评分
 
-每个候选地址通过**结构性检查**验证（循环双向链表完整性使用 **Floyd 龟兔赛跑环检测**、桶一致性、指针范围启发式），而非签名匹配，使方法对编译器/版本变化具有鲁棒性。
+候选验证基于结构性约束（Floyd 环检测、桶一致性、指针范围），不使用字节签名。
 
 > [!TIP]
-> **性能数据**  
-> 在典型场景中，完整的 GOM 扫描链耗时约 5–7 秒（seed_scan ~2.5s → scan1 ~3s → scan2 ~2ms），其中 scan2 利用 PE 段解析将搜索范围限制在 UnityPlayer 模块的 `.data`/`.rdata` 段内，将全进程扫描降至毫秒级。
+> 完整扫描链耗时约 5–7s（seed ~2.5s → scan1 ~3s → scan2 ~2ms），scan2 利用 PE 段解析约束在 `.data`/`.rdata` 范围内。
 
-### 远程 IL2CPP 类型系统重建
+### IL2CPP 类型系统远程重建
 
-对于 IL2CPP 构建，er2 完全从进程内存重建类型信息表：
+从进程内存纯只读重建类型信息表：
 
-- 使用**评分式启发算法**从远程内存中导出并解析 `global-metadata.dat` 头部（不假设文件路径）
-- 从 metadata 字节流构建 `byval_arg → 类名` 映射表
-- 通过采样已知类型并验证名称往返一致性，定位 `Il2CppClass*[]` 指针表
-- 遍历 `metadataRegistration → fieldOffsets` 链解析**运行时字段偏移**，实现无符号的结构体字段访问
+- 评分式启发定位 metadata blob（不读文件）→ 构建 `byval_arg → 类名` 映射
+- 以 `System.Object` / `System.String` 等已知类型名为锚点，暴力定位 `Il2CppClass*[]` 指针表
+- 遍历 `metadataRegistration → fieldOffsetsTable` 链解析字段偏移
+
+### 逆向还原的结构
+
+| 结构 | 布局 |
+|:-------|:-------|
+| GOM 桶 | stride 0x18，每桶含 list_head / hashmask / key |
+| 链表节点 | prev / next + nativeObject |
+| 组件池 | slot stride 0x10，typeId + nativeComponent |
+| NativeGameObject | managed、componentPool、componentCount、tag、name_ptr |
+| Transform | quaternion + localPosition + parent chain |
 
 ### 分层架构
 
@@ -79,21 +78,6 @@ er2 是一个**纯算法库**，能够从运行中的 Unity 进程内存中**还
 - **零耦合** — 算法层仅依赖 `const IMemoryAccessor&`（单方法读接口）
 - **纯头文件** — 所有逻辑在 `include/er2/` 下的 `.hpp` 文件中，无链接时依赖
 - **后端可替换** — `IContextBackend` 抽象进程句柄、模块枚举和内存访问；默认提供 `WinApiContextBackend`
-
----
-
-## 核心算法与数据结构
-
-| 算法 | 源文件 | 用途 |
-|:-----|:-------|:-----|
-| **多级指针链扫描** | `gom/scan_chain.hpp` | 无符号环境下从原始内存定位引擎全局单例 |
-| **Floyd 龟兔赛跑环检测** | `gom/validate_dlist.hpp` | 验证不可信内存中的循环双向链表完整性 |
-| **启发式结构评分** | `gom/manager_score.hpp` | 按结构一致性（链表完整性、桶对齐、指针范围）对候选地址排名 |
-| **PE 节区解析** | `metadata/pe.hpp` | 识别 `.data`/`.rdata` 节以约束扫描范围 |
-| **Metadata 头部评分定位** | `metadata/export.hpp` | 通过统计性头部字段验证定位 IL2CPP metadata blob |
-| **锚点验证型类型表暴力搜索** | `init/classmap.hpp` | 以已知类型名为锚点采样验证，定位 `Il2CppClass*[]` 表 |
-| **四元数 → 世界坐标 SIMD 管线** | `transform/` | 从层级局部变换重建世界坐标 |
-| **三维投影（视图投影矩阵）** | `camera/` | 提取相机矩阵并执行坐标空间变换 |
 
 ---
 
