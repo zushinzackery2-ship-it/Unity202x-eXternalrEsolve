@@ -109,31 +109,31 @@ inline bool FindGomGlobalSlotByNewPointerChainScan(const IMemoryAccessor& mem, s
         static_cast<unsigned long long>(GomScanNowMs() - tHeadBegin));
 
     const std::uint64_t tLevel1Begin = GomScanNowMs();
-    const auto headAddrBytes = ValueBytes(tableHeadAddr);
-    std::vector<std::uintptr_t> level1Hits;
-    if (!ScanProcessForPatternGlobal(mem, process, headAddrBytes.data(), headAddrBytes.size(), level1Hits, 2, chunkSize))
+    std::uintptr_t level1Addr = 0;
+    if (!FindProcessPrivateWritablePointerGlobal(
+        mem,
+        process,
+        tableHeadAddr,
+        level1Addr,
+        chunkSize,
+        [&](std::uintptr_t hit) -> bool
+        {
+            const ManagerCandidateCheck r = CheckGameObjectManagerCandidateBlindScan(mem, hit, GomOffsets{});
+            return r.ok;
+        }))
     {
         GomScanLog("stage.level1_scan.fail pattern=0x%llX ms=%llu",
             static_cast<unsigned long long>(tableHeadAddr),
             static_cast<unsigned long long>(GomScanNowMs() - tLevel1Begin));
         return false;
     }
-    if (level1Hits.size() != 1)
-    {
-        GomScanLog("stage.level1_scan.fail reason=non_unique_hits hits=%zu ms=%llu",
-            level1Hits.size(),
-            static_cast<unsigned long long>(GomScanNowMs() - tLevel1Begin));
-        return false;
-    }
     GomScanLog("stage.level1_scan.ok level1_addr=0x%llX ms=%llu",
-        static_cast<unsigned long long>(level1Hits[0]),
+        static_cast<unsigned long long>(level1Addr),
         static_cast<unsigned long long>(GomScanNowMs() - tLevel1Begin));
 
-    const std::uintptr_t level1Addr = level1Hits[0];
     const std::uint64_t tLevel2Begin = GomScanNowMs();
-    const auto level1Bytes = ValueBytes(level1Addr);
     std::vector<std::uintptr_t> gomHits;
-    if (!ScanProcessForPatternGlobal(mem, process, level1Bytes.data(), level1Bytes.size(), gomHits, 2, chunkSize))
+    if (!ScanModuleSectionsForPointer(mem, moduleBase, level1Addr, gomHits, 2))
     {
         GomScanLog("stage.level2_scan.fail pattern=0x%llX ms=%llu",
             static_cast<unsigned long long>(level1Addr),

@@ -11,7 +11,7 @@
 namespace er2
 {
 
-inline bool ValidateCircularDList(const IMemoryAccessor& mem, std::uintptr_t head, const GomOffsets& off, std::size_t& outSteps, std::size_t maxSteps = 500000)
+inline bool ValidateCircularDList(const IMemoryAccessor& mem, std::uintptr_t head, const GomOffsets& off, std::size_t& outSteps)
 {
     outSteps = 0;
 
@@ -77,15 +77,9 @@ inline bool ValidateCircularDList(const IMemoryAccessor& mem, std::uintptr_t hea
 
     std::uintptr_t slow = head;
     std::uintptr_t fast = head;
-    std::size_t floydSteps = 0;
 
     while (true)
     {
-        if (++floydSteps > maxSteps)
-        {
-            return false;
-        }
-
         if (!Next(slow, slow))
         {
             return false;
@@ -117,10 +111,6 @@ inline bool ValidateCircularDList(const IMemoryAccessor& mem, std::uintptr_t hea
     while (cycleCur != meet)
     {
         ++cycleLen;
-        if (cycleLen > maxSteps)
-        {
-            return false;
-        }
         if (!Next(cycleCur, cycleCur))
         {
             return false;
@@ -149,10 +139,6 @@ inline bool ValidateCircularDList(const IMemoryAccessor& mem, std::uintptr_t hea
     std::uintptr_t cur = headNext;
     for (;;)
     {
-        if (outSteps > maxSteps)
-        {
-            return false;
-        }
         if (!IsLikelyPtr(cur))
         {
             return false;
