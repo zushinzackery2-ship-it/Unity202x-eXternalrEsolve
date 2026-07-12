@@ -34,7 +34,8 @@
 ## 访问器
 
 - **最小内存访问抽象**：以 `IMemoryAccessor` 为核心，算法层只依赖读内存接口。
-- **Windows 适配**：默认提供 WinAPI 实现（`ReadProcessMemory`）适配器。
+- **Windows 跨进程**：默认提供 `WinApiMemoryAccessor`（`ReadProcessMemory`）。
+- **Windows 进程内**：提供 `LocalMemoryAccessor`（`VirtualQuery` + SEH），供注入/同进程调用 metadata、registration 扫描。
 - **Header-only**：纯头文件库。
 
 ## 功能概览
@@ -50,7 +51,8 @@
 | **Transform / Camera / W2S** | 解析 Transform 层级得到世界坐标；读取相机视图投影矩阵并完成世界坐标到屏幕坐标转换 |
 | **Bones** | 遍历 Transform 子树获取骨骼索引、名称与世界坐标 |
 | **IL2CPP Metadata + Hint 导出** | 自动扫描 metadata header、导出 `global-metadata.dat`，并可生成 `*.hint.json` |
-| **DumpSDK2 工具链** | 结合 metadata/hint 结果生成 C# API 描述与泛型结构信息，辅助离线分析/SDK 导出 |
+| **DumpSDK2 工具链** | 结合 metadata/hint 结果生成 `dump.cs` + `generic.json`（完整 Sidecar 套件由调用方自行补齐） |
+
 | **模块化 Header-only 设计** | `er2/unity2/*` 下分门别类的子模块（gom/msid/object/camera/transform/metadata 等），可按需引用 |
 
 ---

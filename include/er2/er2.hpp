@@ -25,11 +25,9 @@
 
 
 #include "os/win/win_memory_accessor.hpp"
-
+#include "os/win/local_memory_accessor.hpp"
 #include "os/win/win_module.hpp"
-
 #include "os/win/win_process.hpp"
-
 #include "os/win/win_window.hpp"
 
 
