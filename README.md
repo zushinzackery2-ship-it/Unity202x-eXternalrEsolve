@@ -86,6 +86,7 @@ GOM 非导出符号，通过**多级指针链扫描**定位：
 - **零耦合** — 算法层仅依赖 `const IMemoryAccessor&`（单方法读接口）
 - **纯头文件** — 所有逻辑在 `include/er2/` 下的 `.hpp` 文件中，无链接时依赖
 - **后端可替换** — `IContextBackend` 抽象进程句柄、模块枚举和内存访问；默认提供 `WinApiContextBackend`
+- **进程内访问** — `LocalMemoryAccessor`（`VirtualQuery` + SEH），供注入/同进程调用 metadata、registration 扫描
 
 ---
 
