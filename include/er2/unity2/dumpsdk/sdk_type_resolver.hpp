@@ -38,7 +38,7 @@ public:
     {
     }
 
-    std::string DescribeFromTypeIndex(std::int32_t typeIndex)
+    std::string DescribeFromTypeIndex(std::int32_t typeIndex) const
     {
         if (typeIndex < 0 || typesPtr_ == 0 || typesCount_ == 0)
         {
@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    std::string DescribeTypePtr(std::uintptr_t typePtr, int depth)
+    std::string DescribeTypePtr(std::uintptr_t typePtr, int depth) const
     {
         if (typePtr == 0 || depth > 8)
         {
@@ -385,9 +385,9 @@ private:
     std::uintptr_t typesPtr_ = 0;
     std::uint32_t typesCount_ = 0;
 
-    std::unordered_map<std::uintptr_t, std::string> typeCache_;
-    std::unordered_map<std::uint32_t, std::string> indexCache_;
-    std::unordered_map<std::uintptr_t, std::uint32_t> pointerToIndex_;
+    mutable std::unordered_map<std::uintptr_t, std::string> typeCache_;
+    mutable std::unordered_map<std::uint32_t, std::string> indexCache_;
+    mutable std::unordered_map<std::uintptr_t, std::uint32_t> pointerToIndex_;
 
     std::unordered_map<std::uint32_t, std::string> typeMap_;
     std::vector<DumpSdk6GenericParamInfo> genericParams_;

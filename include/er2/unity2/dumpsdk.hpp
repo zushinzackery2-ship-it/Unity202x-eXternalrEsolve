@@ -16,8 +16,12 @@
 
 #include "dumpsdk/sdk_runner.hpp"
 
+#include "dumpsdk/offline.hpp"
+
+#include "dumpsdk/writers.hpp"
+
+#include "dumpsdk/run_in_process.hpp"
+
 #include "dumpsdk/sdk_strings.hpp"
 
 #include "dumpsdk/sdk_type_resolver.hpp"
-
-

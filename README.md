@@ -84,9 +84,9 @@ GOM 非导出符号，通过**多级指针链扫描**定位：
 ```
 
 - **零耦合** — 算法层仅依赖 `const IMemoryAccessor&`（单方法读接口）
-- **纯头文件** — 所有逻辑在 `include/er2/` 下的 `.hpp` 文件中，无链接时依赖
+- **头文件为主** — 领域算法在 `include/er2/`；DumpSDK 离线 collect / Sidecar / DummyDll 另有可编译源 `src/dumpsdk/`
 - **后端可替换** — `IContextBackend` 抽象进程句柄、模块枚举和内存访问；默认提供 `WinApiContextBackend`
-- **进程内访问** — `LocalMemoryAccessor`（`VirtualQuery` + SEH），供注入/同进程调用 metadata、registration 扫描
+- **进程内访问** — `LocalMemoryAccessor`（`VirtualQuery` + SEH），供注入/同进程调用 metadata、registration 扫描与 `DumpSdkRunInProcess`
 
 ---
 
@@ -178,6 +178,16 @@ GOM 非导出符号，通过**多级指针链扫描**定位：
 | `GetCameraMatrix(cam)` | 获取相机视图投影矩阵（bool 和 optional 两种重载） |
 | `WorldToScreenPoint(viewProj, screen, pos)` | 世界坐标 → 屏幕坐标变换 |
 
+### DumpSDK（进程内 / 跨进程）
+
+| API | 说明 |
+|:----|:-----|
+| `DumpSdkRunInProcess(mem, gaBase, gaSize, outDir, result)` | 进程内完整产物：Collect → Sidecar → DummyDll（+ 可选 `generic.json`） |
+| `DumpSdkDump(mem, moduleBase, moduleSize, outDir, paths, …)` | 写出 `dump.cs` / `generic.json` / `global-metadata.dat` / hint |
+| `DumpSdk6DumpByPid(pid, paths)` | 跨进程薄包装（`OpenProcess` + `DumpSdkDump`） |
+
+产物目录典型文件：`dump.cs`、`il2cpp.h`、`script.json`、`stringliteral.json`、`generic.json`、`global-metadata.dat`、`il2cpp-offline.hint.json`、`DummyDll/*.dll`。
+
 ---
 
 ## 编译要求
@@ -219,7 +229,7 @@ er2/
 │   └── unity2/
 │       ├── camera/                 # 投影矩阵提取与坐标变换
 │       ├── core/                   # 结构偏移量定义
-│       ├── dumpsdk/                # SDK / 类型描述符导出
+│       ├── dumpsdk/                # SDK 导出 + offline/writers 头
 │       ├── gom/                    # 对象管理器扫描与遍历
 │       ├── init/                   # 全局上下文薄封装层
 │       ├── metadata/               # IL2CPP 元数据重建
@@ -233,6 +243,7 @@ er2/
 │       │   └── native/             #   原生 (C++) 对象访问
 │       ├── transform/              # Transform 层级与世界坐标
 │       └── util/                   # 共享工具函数
+├── src/dumpsdk/                    # DumpSDK 可编译源（offline + writers）
 └── tests/
     ├── unit/                       # 算法单元测试
     └── winapi_smoke/               # 集成冒烟测试

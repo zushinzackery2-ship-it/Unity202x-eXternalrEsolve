@@ -54,5 +54,8 @@ compile_commands.json
 # Internal working docs
 Task-Status.md
 
+# Local indexer
+.auto-index-mcp/
+
 # vcpkg applocal
 vcpkg.applocal.log

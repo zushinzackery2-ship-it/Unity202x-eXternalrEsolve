@@ -12,6 +12,7 @@
 #include "../../mem/memory_accessor.hpp"
 #include "../../mem/memory_read.hpp"
 #include "../metadata/header/metadata_header_fields.hpp"
+#include "../metadata/hint/hint_struct.hpp"
 #include "../metadata/metadata_images.hpp"
 #include "../metadata/registration/registration_helpers.hpp"
 #include "../metadata/registration/registration_types.hpp"
