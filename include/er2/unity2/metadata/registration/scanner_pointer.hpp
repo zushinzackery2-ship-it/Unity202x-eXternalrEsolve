@@ -76,7 +76,7 @@ inline bool IsSectionWanted(const char* name)
 
 
 
-    return s == ".data" || s == ".rdata" || s == ".pdata" || s == ".tls" || s == ".reloc";
+    return s == ".data";
 
 }
 

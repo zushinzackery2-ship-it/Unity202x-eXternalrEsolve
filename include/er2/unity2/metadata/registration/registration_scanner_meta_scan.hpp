@@ -25,7 +25,8 @@ inline void ConvertModuleSectionsToDiskSections(const std::vector<ModuleSection>
     {
         DiskSection ds;
         std::memset(ds.name, 0, sizeof(ds.name));
-        std::strncpy(ds.name, ms.name.c_str(), 8);
+        const std::size_t copyLen = ms.name.size() < 8 ? ms.name.size() : 8;
+        std::memcpy(ds.name, ms.name.data(), copyLen);
         ds.rva = ms.rva;
         ds.vsize = ms.size;
         ds.rawPtr = 0;

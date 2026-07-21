@@ -4,11 +4,9 @@
 #include <er2/unity2/dumpsdk/dump_log.hpp>
 #include <er2/unity2/dumpsdk/offline/OfflineCollector.h>
 #include <er2/unity2/dumpsdk/offline/RegistrationSearch.h>
-#include <er2/unity2/dumpsdk/offline/SafeHostMemory.h>
 #include <er2/unity2/metadata.hpp>
 
 #include <Psapi.h>
-#include <cstring>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -48,7 +46,7 @@ bool TryExtractMetadataFromModule(
         moduleBase,
         0x200000u,
         8192,
-        45.0,
+        180.0,
         false,
         0);
 
@@ -84,69 +82,6 @@ bool TryExtractMetadataFromModule(
             found.score,
             scan.totalSize));
     return true;
-}
-
-bool TryLocateMetadataBaseByFingerprint(
-    const IMemoryAccessor& mem,
-    std::uintptr_t moduleBase,
-    const std::vector<uint8_t>& bytes,
-    uintptr_t& outMetaBase)
-{
-    outMetaBase = 0;
-    if (moduleBase == 0 || bytes.size() < 16)
-    {
-        return false;
-    }
-
-    FoundMetadata found = FindMetadataByScore(
-        mem,
-        moduleBase,
-        0x200000u,
-        8192,
-        45.0,
-        false,
-        0);
-
-    if (!found.metaBase)
-    {
-        return false;
-    }
-
-    uint8_t header[16] = {};
-    if (!HostMemoryTryRead(found.metaBase, header, sizeof(header)))
-    {
-        return false;
-    }
-    if (std::memcmp(header, bytes.data(), sizeof(header)) != 0)
-    {
-        DumpSdkLog(DumpSdkLogLevel::Warn,
-            std::format("[Il2CppOffline] fingerprint metaBase=0x{:X} header mismatch", found.metaBase));
-        return false;
-    }
-
-    outMetaBase = found.metaBase;
-    DumpSdkLog(DumpSdkLogLevel::Info,
-        std::format("[Il2CppOffline] fingerprint metaBase=0x{:X}", outMetaBase));
-    return true;
-}
-
-bool TryReadMetadataFile(const std::filesystem::path& path, std::vector<uint8_t>& outBytes)
-{
-    std::ifstream input(path, std::ios::binary);
-    if (!input)
-    {
-        return false;
-    }
-    input.seekg(0, std::ios::end);
-    const std::streamoff size = input.tellg();
-    if (size <= 0)
-    {
-        return false;
-    }
-    input.seekg(0, std::ios::beg);
-    outBytes.resize(static_cast<size_t>(size));
-    input.read(reinterpret_cast<char*>(outBytes.data()), size);
-    return static_cast<bool>(input);
 }
 
 bool WriteHintJson(const std::filesystem::path& outputDir,
@@ -199,30 +134,22 @@ bool DumpIl2CppOfflineCollect(
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=extract-metadata");
     if (!TryExtractMetadataFromModule(mem, moduleBase, metadataBytes, scan))
     {
-        DumpSdkLog(DumpSdkLogLevel::Info,
-            "[Il2CppOffline] Memory metadata scan failed, trying existing global-metadata.dat");
-        if (!TryReadMetadataFile(metadataPath, metadataBytes))
-        {
-            error = "Failed to extract or load global-metadata.dat";
-            DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
-            return false;
-        }
-        TryLocateMetadataBaseByFingerprint(mem, moduleBase, metadataBytes, scan.metaBase);
+        error = "Metadata scan failed: could not locate global-metadata.dat in memory";
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
     }
-    else
+
+    DumpSdkLog(DumpSdkLogLevel::Info,
+        std::format("[Il2CppOffline] Extracted global-metadata.dat from memory: {} bytes @ 0x{:X}",
+            metadataBytes.size(),
+            scan.metaBase));
+    std::error_code ec;
+    std::filesystem::create_directories(outputDir, ec);
+    std::ofstream outFile(metadataPath, std::ios::binary);
+    if (outFile)
     {
-        DumpSdkLog(DumpSdkLogLevel::Info,
-            std::format("[Il2CppOffline] Extracted global-metadata.dat from memory: {} bytes @ 0x{:X}",
-                metadataBytes.size(),
-                scan.metaBase));
-        std::error_code ec;
-        std::filesystem::create_directories(outputDir, ec);
-        std::ofstream outFile(metadataPath, std::ios::binary);
-        if (outFile)
-        {
-            outFile.write(reinterpret_cast<const char*>(metadataBytes.data()),
-                static_cast<std::streamsize>(metadataBytes.size()));
-        }
+        outFile.write(reinterpret_cast<const char*>(metadataBytes.data()),
+            static_cast<std::streamsize>(metadataBytes.size()));
     }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=collect");
