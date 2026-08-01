@@ -61,6 +61,7 @@ private:
     uintptr_t FindCodeRegistrationData();
     uintptr_t FindCodeRegistrationExec();
     uintptr_t FindCodeRegistration2019(const std::vector<PeSearchSection>& secs);
+    uintptr_t FindCodeRegistrationFromSecondReference(uintptr_t reference);
     uintptr_t FindCodeRegistrationByCodeGenModules();
     uintptr_t FindMetadataRegistrationByMetadataUsages();
 
@@ -68,8 +69,9 @@ private:
     uintptr_t FindBestMetadataRegistrationStartFromHit(uintptr_t metadataUsagesCountAddress, uint64_t metadataUsages);
 
     bool TryCheckCodeGenModulesArray(uint64_t codeGenModules);
+    bool TryValidateOldCodeRegistrationCandidate(uintptr_t address);
+    bool TryValidateOldMetadataRegistrationCandidate(uintptr_t address);
     bool TryCheckPointerArrayInExec(uint64_t arrayPtr, uint64_t count);
-    bool TryCheckPointerArrayInData(uint64_t arrayPtr, uint64_t count);
     bool TryCheckPointerArrayInBss(uint64_t arrayPtr, uint64_t count);
 
     std::vector<uintptr_t> FindReference(uintptr_t addr);

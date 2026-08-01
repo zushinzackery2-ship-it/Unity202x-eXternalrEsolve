@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 
 namespace er2
@@ -43,6 +44,7 @@ enum class Il2CppTypeEnum : uint8_t
     IL2CPP_TYPE_SENTINEL = 0x41,
     IL2CPP_TYPE_PINNED = 0x45,
     IL2CPP_TYPE_ENUM = 0x55,
+    IL2CPP_TYPE_INDEX = 0xFF,
 };
 
 struct Il2CppTypeRaw
@@ -83,6 +85,10 @@ struct Il2CppTypeRuntime
     {
         return static_cast<int64_t>(datapoint);
     }
+    uint64_t GenericParameterHandle() const
+    {
+        return datapoint;
+    }
     uint64_t GenericClass() const
     {
         return datapoint;
@@ -118,6 +124,26 @@ struct Il2CppGenericClass
     uint64_t type = 0;
     Il2CppGenericContext context{};
     uint64_t cached_class = 0;
+};
+
+struct Il2CppMethodSpec
+{
+    int32_t methodDefinitionIndex = 0;
+    int32_t classIndexIndex = 0;
+    int32_t methodIndexIndex = 0;
+};
+
+struct Il2CppGenericMethodIndices
+{
+    int32_t methodIndex = 0;
+    int32_t invokerIndex = 0;
+    int32_t adjustorThunk = 0;
+};
+
+struct Il2CppGenericMethodFunctions
+{
+    int32_t genericMethodIndex = 0;
+    Il2CppGenericMethodIndices indices{};
 };
 
 struct CodeRegistrationView
@@ -180,11 +206,24 @@ struct CodeGenModuleView
     int64_t rgctxsCount = 0;
     uint64_t rgctxs = 0;
     uint64_t debuggerMetadata = 0;
+    uint64_t customAttributeCacheGenerator = 0;
 };
 
 bool ReadCodeRegistration(const class PeImage& pe, uintptr_t va, double version, CodeRegistrationView& out);
 bool ReadMetadataRegistration(const class PeImage& pe, uintptr_t va, double version, MetadataRegistrationView& out);
 bool ReadCodeGenModule(const class PeImage& pe, uintptr_t va, double version, CodeGenModuleView& out);
 bool ReadIl2CppType(const class PeImage& pe, uintptr_t va, double version, Il2CppTypeRuntime& out);
+bool ReadIl2CppGenericClass(const class PeImage& pe, uintptr_t va, double version, Il2CppGenericClass& out);
+bool ReadIl2CppArrayType(const class PeImage& pe, uintptr_t va, Il2CppArrayType& out);
+bool ReadIl2CppGenericInst(const class PeImage& pe, uintptr_t va, Il2CppGenericInst& out);
+bool ReadIl2CppMethodSpec(const class PeImage& pe, uintptr_t va, Il2CppMethodSpec& out);
+bool ReadGenericMethodFunctions(
+    const class PeImage& pe,
+    uintptr_t va,
+    double version,
+    Il2CppGenericMethodFunctions& out);
+
+size_t MethodSpecSize();
+size_t GenericMethodFunctionsSize(double version);
 
 } // namespace er2

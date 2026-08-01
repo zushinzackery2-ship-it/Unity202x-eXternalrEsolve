@@ -66,6 +66,26 @@ inline bool TryReadU64(const PeImage& pe, uint64_t absoluteAddress, uint64_t& ou
     }
 }
 
+inline bool TryReadU32(const PeImage& pe, uint64_t absoluteAddress, uint32_t& out)
+{
+    try
+    {
+        const std::vector<uint8_t> bytes = pe.ReadBytes(absoluteAddress, sizeof(out));
+        if (bytes.size() != sizeof(out))
+        {
+            out = 0;
+            return false;
+        }
+        std::memcpy(&out, bytes.data(), sizeof(out));
+        return true;
+    }
+    catch (...)
+    {
+        out = 0;
+        return false;
+    }
+}
+
 inline int64_t ReadIntPtrAbs(const PeImage& pe, uint64_t absoluteAddress)
 {
     return static_cast<int64_t>(pe.ReadU64(absoluteAddress));

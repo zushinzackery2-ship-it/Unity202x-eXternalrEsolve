@@ -59,6 +59,11 @@ public:
     int32_t ReadInt32();
     uint64_t ReadUInt64();
     int64_t ReadInt64();
+    float ReadSingle();
+    double ReadDouble();
+
+    uint32_t ReadCompressedUInt32();
+    int32_t ReadCompressedInt32();
 
     std::vector<uint8_t> ReadBytes(size_t count);
 

@@ -46,6 +46,7 @@ public:
 
     uint64_t MapVATR(uint64_t absoluteAddress) const;
     uint64_t MapRTVA(uint64_t offset) const;
+    uint64_t MapFileOffset(uint64_t absoluteAddress) const;
 
     uint64_t ReadU64(uint64_t absoluteAddress) const;
     std::vector<uint8_t> ReadBytes(uint64_t absoluteAddress, size_t count) const;
@@ -57,10 +58,12 @@ private:
 
     const PeSectionHeader* FindSectionByRva(uint32_t rva) const;
     const PeSectionHeader* FindSectionByOffset(uint32_t offset) const;
+    const PeSectionHeader* FindDiskSectionByRva(uint32_t rva) const;
 
     uint64_t imageBase_ = 0;
     bool memoryLoaded_ = false;
     std::vector<PeSectionHeader> sections_;
+    std::vector<PeSectionHeader> diskSections_;
     std::vector<uint8_t> ownedBytes_;
 };
 

@@ -1,6 +1,7 @@
 #include <er2/unity2/dumpsdk/offline/BinaryStream.h>
 
 #include <cstring>
+#include <limits>
 
 namespace er2
 {
@@ -94,6 +95,73 @@ uint64_t BinaryStream::ReadUInt64()
 int64_t BinaryStream::ReadInt64()
 {
     return static_cast<int64_t>(ReadUInt64());
+}
+
+float BinaryStream::ReadSingle()
+{
+    const uint32_t bits = ReadUInt32();
+    float value = 0.0f;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+double BinaryStream::ReadDouble()
+{
+    const uint64_t bits = ReadUInt64();
+    double value = 0.0;
+    std::memcpy(&value, &bits, sizeof(value));
+    return value;
+}
+
+uint32_t BinaryStream::ReadCompressedUInt32()
+{
+    const uint8_t first = ReadUInt8();
+    if ((first & 0x80u) == 0)
+    {
+        return first;
+    }
+    if ((first & 0xC0u) == 0x80u)
+    {
+        return (static_cast<uint32_t>(first & ~0x80u) << 8) | ReadUInt8();
+    }
+    if ((first & 0xE0u) == 0xC0u)
+    {
+        const uint8_t second = ReadUInt8();
+        const uint8_t third = ReadUInt8();
+        const uint8_t fourth = ReadUInt8();
+        return (static_cast<uint32_t>(first & ~0xC0u) << 24) |
+            (static_cast<uint32_t>(second) << 16) |
+            (static_cast<uint32_t>(third) << 8) |
+            fourth;
+    }
+    if (first == 0xF0u)
+    {
+        return ReadUInt32();
+    }
+    if (first == 0xFEu)
+    {
+        return 0xFFFFFFFEu;
+    }
+    if (first == 0xFFu)
+    {
+        return 0xFFFFFFFFu;
+    }
+    throw StreamBoundsError("invalid compressed uint32 prefix");
+}
+
+int32_t BinaryStream::ReadCompressedInt32()
+{
+    const uint32_t encoded = ReadCompressedUInt32();
+    if (encoded == 0xFFFFFFFFu)
+    {
+        return (std::numeric_limits<int32_t>::min)();
+    }
+    const uint32_t shifted = encoded >> 1;
+    if ((encoded & 1u) == 0)
+    {
+        return static_cast<int32_t>(shifted);
+    }
+    return -static_cast<int32_t>(shifted + 1u);
 }
 
 std::vector<uint8_t> BinaryStream::ReadBytes(size_t count)

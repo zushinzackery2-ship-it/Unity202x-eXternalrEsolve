@@ -23,6 +23,9 @@ struct CollectedParam
     bool isOut = false;
     bool isIn = false;
     bool isByRef = false;
+    std::string attributePrefix;
+    std::string defaultValue;
+    bool defaultValueIsComment = false;
 };
 
 struct CollectedField
@@ -35,8 +38,11 @@ struct CollectedField
     bool isStatic = false;
     bool isLiteral = false;
     bool isReadOnly = false;
+    bool hasOffset = false;
     std::string defaultValue;
+    bool defaultValueIsComment = false;
     std::string accessModifier;
+    std::vector<std::string> attributes;
 };
 
 struct CollectedProperty
@@ -47,6 +53,27 @@ struct CollectedProperty
     bool hasGetter = false;
     bool hasSetter = false;
     std::string modifiers;
+    std::vector<std::string> attributes;
+};
+
+struct CollectedEvent
+{
+    std::string name;
+    std::string typeName;
+    uint32_t token = 0;
+    bool hasAdd = false;
+    bool hasRemove = false;
+    bool hasRaise = false;
+    std::string modifiers;
+    std::vector<std::string> attributes;
+};
+
+struct CollectedGenericInstGroup
+{
+    uintptr_t address = 0;
+    uint32_t rva = 0;
+    uint32_t fileOffset = 0;
+    std::vector<std::string> entries;
 };
 
 struct CollectedMethod
@@ -55,9 +82,12 @@ struct CollectedMethod
     std::string returnType;
     std::vector<CollectedParam> params;
     uintptr_t address = 0;
+    uint32_t rva = 0;
+    uint32_t fileOffset = 0;
     uint32_t token = 0;
     uint32_t flags = 0;
     uint32_t iflags = 0;
+    uint16_t slot = 0xFFFFu;
     bool isStatic = false;
     bool isInstance = false;
     bool isGeneric = false;
@@ -67,7 +97,10 @@ struct CollectedMethod
     bool isOverride = false;
     bool isSealed = false;
     bool isExtern = false;
+    bool returnIsByRef = false;
     std::string accessModifier;
+    std::vector<std::string> attributes;
+    std::vector<CollectedGenericInstGroup> genericInstGroups;
 };
 
 struct CollectedType
@@ -81,6 +114,7 @@ struct CollectedType
     uint32_t token = 0;
     uint32_t flags = 0;
     size_t index = 0;
+    size_t typeDefIndex = 0;
     size_t instanceSize = 0;
     bool isAbstract = false;
     bool isSealed = false;
@@ -88,9 +122,12 @@ struct CollectedType
     bool isPublic = false;
     bool isNested = false;
     bool isSerializable = false;
+    bool isStaticClass = false;
     std::string accessModifier;
+    std::vector<std::string> attributes;
     std::vector<CollectedField> fields;
     std::vector<CollectedProperty> properties;
+    std::vector<CollectedEvent> events;
     std::vector<CollectedMethod> methods;
 };
 
@@ -129,6 +166,9 @@ struct CollectedData
     std::vector<CollectedStringLiteral> strings;
     std::vector<CollectedMetadata> metadata;
     std::vector<CollectedMethodRef> methodRefs;
+    double metadataVersion = 0.0;
+    uintptr_t imageBase = 0;
+    bool fromOffline = false;
 };
 
 } // namespace er2

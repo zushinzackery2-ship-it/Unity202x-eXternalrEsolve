@@ -36,17 +36,6 @@ bool ReadU64(const PeImage& pe, uintptr_t va, uint64_t& out)
     return TryReadU64(pe, va, out);
 }
 
-bool SkipU64(const PeImage& pe, uintptr_t& va)
-{
-    uint64_t dummy = 0;
-    if (!ReadU64(pe, va, dummy))
-    {
-        return false;
-    }
-    va += kPtrSize;
-    return true;
-}
-
 bool ReadFieldIf(const PeImage& pe, uintptr_t& va, bool condition, uint64_t& field)
 {
     if (!condition)
@@ -199,113 +188,6 @@ bool ReadCodeRegistration(const PeImage& pe, uintptr_t va, double version, CodeR
     {
         return false;
     }
-    return true;
-}
-
-bool ReadMetadataRegistration(const PeImage& pe, uintptr_t va, double version, MetadataRegistrationView& out)
-{
-    out = {};
-    try
-    {
-        out.genericClassesCount = static_cast<int64_t>(pe.ReadU64(va));
-        out.genericClasses = pe.ReadU64(va + kPtrSize);
-        out.genericInstsCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * 2));
-        out.genericInsts = pe.ReadU64(va + kPtrSize * 3);
-        out.genericMethodTableCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * 4));
-        out.genericMethodTable = pe.ReadU64(va + kPtrSize * 5);
-        out.typesCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * 6));
-        out.types = pe.ReadU64(va + kPtrSize * 7);
-        out.methodSpecsCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * 8));
-        out.methodSpecs = pe.ReadU64(va + kPtrSize * 9);
-    }
-    catch (...)
-    {
-        return false;
-    }
-    if (version <= 16.0)
-    {
-        pe.ReadU64(va + kPtrSize * 10);
-        pe.ReadU64(va + kPtrSize * 11);
-    }
-    const size_t fieldOffsetsIndex = version <= 16.0 ? 12 : 10;
-    try
-    {
-        out.fieldOffsetsCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * fieldOffsetsIndex));
-        out.fieldOffsets = pe.ReadU64(va + kPtrSize * (fieldOffsetsIndex + 1));
-        out.typeDefinitionsSizesCount = static_cast<int64_t>(pe.ReadU64(va + kPtrSize * (fieldOffsetsIndex + 2)));
-        out.typeDefinitionsSizes = pe.ReadU64(va + kPtrSize * (fieldOffsetsIndex + 3));
-        if (version >= 19.0)
-        {
-            out.metadataUsagesCount = pe.ReadU64(va + kPtrSize * (fieldOffsetsIndex + 4));
-            out.metadataUsages = pe.ReadU64(va + kPtrSize * (fieldOffsetsIndex + 5));
-        }
-    }
-    catch (...)
-    {
-        return false;
-    }
-    return true;
-}
-
-bool ReadCodeGenModule(const PeImage& pe, uintptr_t va, double version, CodeGenModuleView& out)
-{
-    out = {};
-    if (!ReadU64(pe, va, out.moduleName))
-    {
-        return false;
-    }
-    uintptr_t cursor = va + kPtrSize;
-    try
-    {
-        out.methodPointerCount = static_cast<int64_t>(pe.ReadU64(cursor));
-    }
-    catch (...)
-    {
-        return false;
-    }
-    cursor += kPtrSize;
-    if (!ReadU64(pe, cursor, out.methodPointers))
-    {
-        return false;
-    }
-    cursor += kPtrSize;
-    if (BetweenVersion(version, 24.5, 24.5) || version >= 27.1)
-    {
-        try
-        {
-            out.adjustorThunkCount = static_cast<int64_t>(pe.ReadU64(cursor));
-        }
-        catch (...)
-        {
-            return false;
-        }
-        cursor += kPtrSize;
-        if (!ReadU64(pe, cursor, out.adjustorThunks))
-        {
-            return false;
-        }
-        cursor += kPtrSize;
-    }
-    if (!ReadU64(pe, cursor, out.invokerIndices))
-    {
-        return false;
-    }
-    return true;
-}
-
-bool ReadIl2CppType(const PeImage& pe, uintptr_t va, double version, Il2CppTypeRuntime& out)
-{
-    out = {};
-    try
-    {
-        out.datapoint = pe.ReadU64(va);
-        out.bits = static_cast<uint32_t>(pe.ReadU64(va + kPtrSize));
-    }
-    catch (...)
-    {
-        return false;
-    }
-    out.Init(version);
     return true;
 }
 

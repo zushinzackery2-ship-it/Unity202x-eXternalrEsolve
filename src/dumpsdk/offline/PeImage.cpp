@@ -2,7 +2,6 @@
 
 #include <er2/unity2/dumpsdk/offline/SafeHostMemory.h>
 
-#include <algorithm>
 #include <cstring>
 #include <stdexcept>
 
@@ -117,16 +116,6 @@ PeSectionHeader ReadSectionHeader(BinaryStream& stream)
     return header;
 }
 
-bool IsExecSection(uint32_t characteristics)
-{
-    return characteristics == 0x60000020u;
-}
-
-bool IsDataSection(uint32_t characteristics)
-{
-    return characteristics == 0x40000040u || characteristics == 0xC0000040u;
-}
-
 } // namespace
 
 PeImage::PeImage(const uint8_t* base, size_t size)
@@ -139,6 +128,7 @@ void PeImage::Load(const uint8_t* base, size_t size)
     Bind(base, size);
     memoryLoaded_ = false;
     sections_.clear();
+    diskSections_.clear();
     ParsePeHeaders();
 }
 
@@ -187,6 +177,7 @@ void PeImage::ParsePeHeaders()
     {
         sections_.push_back(ReadSectionHeader(*this));
     }
+    diskSections_ = sections_;
 }
 
 void PeImage::LoadFromMemory(uint64_t base)
@@ -222,6 +213,7 @@ bool PeImage::LoadFromModuleSnapshot(HMODULE module, std::string& error)
         ownedBytes_.clear();
         Bind(nullptr, 0);
         sections_.clear();
+        diskSections_.clear();
         memoryLoaded_ = false;
         imageBase_ = 0;
         return false;
@@ -248,143 +240,11 @@ bool PeImage::LoadFromModuleRange(uintptr_t moduleBase, size_t moduleSize, std::
         ownedBytes_.clear();
         Bind(nullptr, 0);
         sections_.clear();
+        diskSections_.clear();
         memoryLoaded_ = false;
         imageBase_ = 0;
         return false;
     }
-}
-
-const PeSectionHeader* PeImage::FindSectionByRva(uint32_t rva) const
-{
-    for (const PeSectionHeader& section : sections_)
-    {
-        if (section.ContainsRva(rva))
-        {
-            return &section;
-        }
-    }
-    return nullptr;
-}
-
-const PeSectionHeader* PeImage::FindSectionByOffset(uint32_t offset) const
-{
-    for (const PeSectionHeader& section : sections_)
-    {
-        if (section.ContainsOffset(offset))
-        {
-            return &section;
-        }
-    }
-    return nullptr;
-}
-
-uint64_t PeImage::MapVATR(uint64_t absoluteAddress) const
-{
-    if (!memoryLoaded_)
-    {
-        throw PeFormatError("LoadFromMemory must be called before MapVATR");
-    }
-    if (absoluteAddress < imageBase_)
-    {
-        return 0;
-    }
-
-    const uint32_t rva = static_cast<uint32_t>(absoluteAddress - imageBase_);
-    const PeSectionHeader* section = FindSectionByRva(rva);
-    if (section == nullptr)
-    {
-        return 0;
-    }
-
-    return static_cast<uint64_t>(rva - section->virtualAddress + section->pointerToRawData);
-}
-
-uint64_t PeImage::MapRTVA(uint64_t offset) const
-{
-    if (!memoryLoaded_)
-    {
-        throw PeFormatError("LoadFromMemory must be called before MapRTVA");
-    }
-
-    const uint32_t fileOffset = static_cast<uint32_t>(offset);
-    const PeSectionHeader* section = FindSectionByOffset(fileOffset);
-    if (section == nullptr)
-    {
-        return 0;
-    }
-
-    return static_cast<uint64_t>(fileOffset - section->pointerToRawData + section->virtualAddress) + imageBase_;
-}
-
-uint64_t PeImage::ReadU64(uint64_t absoluteAddress) const
-{
-    const uint64_t offset = MapVATR(absoluteAddress);
-    if (offset == 0 && absoluteAddress != imageBase_)
-    {
-        throw StreamBoundsError("MapVATR failed for ReadU64");
-    }
-
-    PeImage reader(Data(), Size());
-    reader.sections_ = sections_;
-    reader.imageBase_ = imageBase_;
-    reader.memoryLoaded_ = memoryLoaded_;
-    reader.SetPosition(static_cast<size_t>(offset));
-    return reader.ReadUInt64();
-}
-
-std::vector<uint8_t> PeImage::ReadBytes(uint64_t absoluteAddress, size_t count) const
-{
-    const uint64_t offset = MapVATR(absoluteAddress);
-    if (offset == 0 && absoluteAddress != imageBase_)
-    {
-        throw StreamBoundsError("MapVATR failed for ReadBytes");
-    }
-
-    PeImage reader(Data(), Size());
-    reader.sections_ = sections_;
-    reader.imageBase_ = imageBase_;
-    reader.memoryLoaded_ = memoryLoaded_;
-    reader.SetPosition(static_cast<size_t>(offset));
-    return reader.BinaryStream::ReadBytes(count);
-}
-
-std::string PeImage::ReadCString(uint64_t absoluteAddress) const
-{
-    const uint64_t offset = MapVATR(absoluteAddress);
-    if (offset == 0 && absoluteAddress != imageBase_)
-    {
-        throw StreamBoundsError("MapVATR failed for ReadCString");
-    }
-
-    PeImage reader(Data(), Size());
-    reader.SetPosition(static_cast<size_t>(offset));
-    return reader.ReadStringToNull();
-}
-
-std::vector<PeSectionHeader> PeImage::ExecSections() const
-{
-    std::vector<PeSectionHeader> result;
-    for (const PeSectionHeader& section : sections_)
-    {
-        if (IsExecSection(section.characteristics))
-        {
-            result.push_back(section);
-        }
-    }
-    return result;
-}
-
-std::vector<PeSectionHeader> PeImage::DataSections() const
-{
-    std::vector<PeSectionHeader> result;
-    for (const PeSectionHeader& section : sections_)
-    {
-        if (IsDataSection(section.characteristics))
-        {
-            result.push_back(section);
-        }
-    }
-    return result;
 }
 
 } // namespace er2
