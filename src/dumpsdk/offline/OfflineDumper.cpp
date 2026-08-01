@@ -3,7 +3,9 @@
 #include <er2/os/win/local_memory_accessor.hpp>
 #include <er2/unity2/dumpsdk/dump_log.hpp>
 #include <er2/unity2/dumpsdk/offline/OfflineCollector.h>
+#include <er2/unity2/dumpsdk/offline/PeImage.h>
 #include <er2/unity2/dumpsdk/offline/RegistrationSearch.h>
+#include <er2/unity2/dumpsdk/xrefs/GlobalStringXrefExporter.h>
 #include <er2/unity2/metadata.hpp>
 
 #include <Psapi.h>
@@ -127,6 +129,15 @@ bool DumpIl2CppOfflineCollect(
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=begin");
 
     const std::filesystem::path outputDir(outDir);
+    PeImage pe;
+    DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=snapshot");
+    if (!pe.LoadFromModuleRange(moduleBase, moduleSize, error))
+    {
+        DumpSdkLog(DumpSdkLogLevel::Error,
+            "[Il2CppOffline] module snapshot failed: " + error);
+        return false;
+    }
+
     std::vector<uint8_t> metadataBytes;
     MetadataScanResult scan{};
     const auto metadataPath = outputDir / "global-metadata.dat";
@@ -154,8 +165,7 @@ bool DumpIl2CppOfflineCollect(
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=collect");
     RegistrationInitResult registration{};
-    if (!Collect(moduleBase,
-        moduleSize,
+    if (!Collect(pe,
         metadataBytes.data(),
         metadataBytes.size(),
         scan.metaBase,
@@ -172,6 +182,28 @@ bool DumpIl2CppOfflineCollect(
         moduleBase,
         registration.codeRegistrationVa,
         registration.metadataRegistrationVa);
+
+    DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=global-string-xrefs");
+    GlobalStringXrefReportResults xrefResults;
+    std::string xrefError;
+    if (!GlobalStringXrefExporter::ExportReports(
+            pe,
+            outputDir,
+            {},
+            xrefResults,
+            xrefError))
+    {
+        error = "global string xref export failed: " + xrefError;
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
+    }
+    DumpSdkLog(DumpSdkLogLevel::Info, std::format(
+        "[Il2CppOffline] global string xrefs globalStrings={} globalReferences={} "
+        "runtimeRdataStrings={} runtimeRdataReferences={}",
+        xrefResults.global.stringCount,
+        xrefResults.global.referenceCount,
+        xrefResults.runtimeRdata.stringCount,
+        xrefResults.runtimeRdata.referenceCount));
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=end");
     return true;

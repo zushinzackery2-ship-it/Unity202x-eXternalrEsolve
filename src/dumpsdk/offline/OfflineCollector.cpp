@@ -8,6 +8,7 @@
 #include <er2/unity2/metadata.hpp>
 
 #include <format>
+#include <limits>
 
 namespace er2
 {
@@ -79,7 +80,6 @@ bool Collect(
     std::string& error,
     RegistrationInitResult* registrationOut)
 {
-    out = {};
     if (moduleBase == 0 || moduleSize == 0 || metaBytes == nullptr || metaSize == 0)
     {
         error = "invalid Collect input";
@@ -91,6 +91,40 @@ bool Collect(
     {
         return false;
     }
+
+    return Collect(
+        pe,
+        metaBytes,
+        metaSize,
+        metaBase,
+        out,
+        error,
+        registrationOut);
+}
+
+bool Collect(
+    const PeImage& pe,
+    const uint8_t* metaBytes,
+    size_t metaSize,
+    uintptr_t metaBase,
+    CollectedData& out,
+    std::string& error,
+    RegistrationInitResult* registrationOut)
+{
+    out = {};
+    if (!pe.IsBound()
+        || pe.ImageBase() == 0
+        || pe.Size() == 0
+        || pe.Size() > (std::numeric_limits<std::uint32_t>::max)()
+        || metaBytes == nullptr
+        || metaSize == 0)
+    {
+        error = "invalid Collect snapshot input";
+        return false;
+    }
+
+    const uintptr_t moduleBase = static_cast<uintptr_t>(pe.ImageBase());
+    const uint32_t moduleSize = static_cast<uint32_t>(pe.Size());
 
     Metadata metadata;
     try

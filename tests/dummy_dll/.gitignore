@@ -1,0 +1,5 @@
+bin/
+obj/
+out/
+build_log.txt
+test_log.txt

@@ -9,10 +9,20 @@ namespace er2
 {
 
 struct RegistrationInitResult;
+class PeImage;
 
 bool Collect(
     std::uintptr_t moduleBase,
     std::uint32_t moduleSize,
+    const uint8_t* metaBytes,
+    size_t metaSize,
+    uintptr_t metaBase,
+    CollectedData& out,
+    std::string& error,
+    RegistrationInitResult* registrationOut = nullptr);
+
+bool Collect(
+    const PeImage& pe,
     const uint8_t* metaBytes,
     size_t metaSize,
     uintptr_t metaBase,

@@ -18,6 +18,8 @@
 
 #include "dumpsdk/offline.hpp"
 
+#include "dumpsdk/xrefs.hpp"
+
 #include "dumpsdk/writers.hpp"
 
 #include "dumpsdk/run_in_process.hpp"

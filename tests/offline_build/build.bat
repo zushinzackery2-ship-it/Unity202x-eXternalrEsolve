@@ -43,6 +43,12 @@ cl /nologo /std:c++20 /EHsc /c /W3 /I "..\..\include" /I "..\.." ^
  "..\..\src\dumpsdk\offline\CollectStrings.cpp" ^
  "..\..\src\dumpsdk\offline\OfflineCollector.cpp" ^
  "..\..\src\dumpsdk\offline\OfflineDumper.cpp" ^
+ "..\..\src\dumpsdk\xrefs\GlobalStringCatalog.cpp" ^
+ "..\..\src\dumpsdk\xrefs\GlobalStringDecoder.cpp" ^
+ "..\..\src\dumpsdk\xrefs\GlobalStringXrefDocumentWriter.cpp" ^
+ "..\..\src\dumpsdk\xrefs\GlobalStringXrefExporter.cpp" ^
+ "..\..\src\dumpsdk\xrefs\X64InstructionDecoder.cpp" ^
+ "..\..\src\dumpsdk\xrefs\X64ReferenceScanner.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_writer.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_dump_cs.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_header.cpp" ^
