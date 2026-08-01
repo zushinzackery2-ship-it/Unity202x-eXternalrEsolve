@@ -5,6 +5,8 @@
 #include "X64ReferenceScanner.h"
 #include "XrefPeAccess.h"
 
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
+
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -68,47 +70,67 @@ XrefAnalysis AnalyzeSnapshot(
     }
 
     std::unordered_set<std::size_t> referencedIndices;
-    for (const GlobalStringReferenceCandidate& candidate : X64ReferenceScanner::Scan(image))
+    const std::vector<GlobalStringReferenceCandidate> candidates =
+        X64ReferenceScanner::Scan(image);
+    DumpSdkProgressScope resolveProgress("Resolve native xrefs", candidates.size());
+    const std::size_t percentStep = candidates.size() / 100
+        + (candidates.size() % 100 == 0 ? 0 : 1);
+    const std::size_t updateStep = (std::max<std::size_t>)(
+        1,
+        (std::min<std::size_t>)(1024, percentStep));
+    std::size_t processedCandidates = 0;
+    for (const GlobalStringReferenceCandidate& candidate : candidates)
     {
         std::size_t stringIndex = 0;
+        bool resolved = false;
         const auto exact = exactStrings.find(candidate.targetAddress);
         if (exact != exactStrings.end())
         {
             stringIndex = exact->second;
+            resolved = true;
         }
         else
         {
             std::size_t containingIndex = 0;
-            if (!GlobalStringCatalog::FindContaining(catalog, candidate.targetAddress, containingIndex))
-            {
-                continue;
-            }
-
             DetectedGlobalString detected;
-            if (!GlobalStringCatalog::TryDecodeAtAddress(
+            if (GlobalStringCatalog::FindContaining(
+                    catalog,
+                    candidate.targetAddress,
+                    containingIndex)
+                && GlobalStringCatalog::TryDecodeAtAddress(
                     image,
                     candidate.targetAddress,
                     analysis.options,
                     detected))
             {
-                continue;
+                stringIndex = analysis.strings.size();
+                analysis.strings.push_back(std::move(detected));
+                exactStrings.emplace(candidate.targetAddress, stringIndex);
+                resolved = true;
             }
-            stringIndex = analysis.strings.size();
-            analysis.strings.push_back(std::move(detected));
-            exactStrings.emplace(candidate.targetAddress, stringIndex);
         }
 
-        DetectedGlobalString& detected = analysis.strings[stringIndex];
-        if (!HasReference(detected, candidate))
+        if (resolved)
         {
-            detected.references.push_back({
-                candidate.instructionRva,
-                candidate.targetAddress,
-                candidate.section,
-                candidate.kind,
-                candidate.mnemonic });
+            DetectedGlobalString& detected = analysis.strings[stringIndex];
+            if (!HasReference(detected, candidate))
+            {
+                detected.references.push_back({
+                    candidate.instructionRva,
+                    candidate.targetAddress,
+                    candidate.section,
+                    candidate.kind,
+                    candidate.mnemonic });
+            }
+            referencedIndices.insert(stringIndex);
         }
-        referencedIndices.insert(stringIndex);
+
+        ++processedCandidates;
+        if (processedCandidates % updateStep == 0
+            || processedCandidates == candidates.size())
+        {
+            resolveProgress.Update(processedCandidates);
+        }
     }
 
     analysis.referencedIndices.assign(referencedIndices.begin(), referencedIndices.end());
@@ -129,6 +151,7 @@ XrefAnalysis AnalyzeSnapshot(
         {
             return analysis.strings[left].rva < analysis.strings[right].rva;
         });
+    resolveProgress.Complete();
     return analysis;
 }
 

@@ -16,6 +16,8 @@
 
 #include "dumpsdk/sdk_runner.hpp"
 
+#include "dumpsdk/dump_progress.hpp"
+
 #include "dumpsdk/offline.hpp"
 
 #include "dumpsdk/xrefs.hpp"

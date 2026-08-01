@@ -2,6 +2,7 @@
 
 #include <er2/os/win/local_memory_accessor.hpp>
 #include <er2/unity2/dumpsdk/dump_log.hpp>
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
 #include <er2/unity2/dumpsdk/offline/OfflineCollector.h>
 #include <er2/unity2/dumpsdk/offline/PeImage.h>
 #include <er2/unity2/dumpsdk/offline/RegistrationSearch.h>
@@ -9,6 +10,7 @@
 #include <er2/unity2/metadata.hpp>
 
 #include <Psapi.h>
+#include <algorithm>
 #include <filesystem>
 #include <format>
 #include <fstream>
@@ -43,6 +45,7 @@ bool TryExtractMetadataFromModule(
     DumpSdkLog(DumpSdkLogLevel::Info,
         "[Il2CppOffline] metadata scan: er2 FindMetadataPointerByScore");
 
+    DumpSdkProgressScope locateProgress("Locate metadata", 1);
     FoundMetadata found = FindMetadataByScore(
         mem,
         moduleBase,
@@ -58,7 +61,9 @@ bool TryExtractMetadataFromModule(
             "[Il2CppOffline] er2 metadata pointer score search failed");
         return false;
     }
+    locateProgress.Complete();
 
+    DumpSdkProgressScope readProgress("Read metadata", 1);
     std::uint32_t totalSize = 0;
     if (!CalcTotalSizeFromHeader(mem, found.metaBase, totalSize) || totalSize == 0)
     {
@@ -73,6 +78,7 @@ bool TryExtractMetadataFromModule(
             "[Il2CppOffline] er2 ReadMetadataRegion failed");
         return false;
     }
+    readProgress.Complete();
 
     scan.metaBase = found.metaBase;
     scan.totalSize = outBytes.size();
@@ -91,6 +97,7 @@ bool WriteHintJson(const std::filesystem::path& outputDir,
     uintptr_t codeRegistrationVa,
     uintptr_t metadataRegistrationVa)
 {
+    DumpSdkProgressScope progress("Write offline hint", 1, "il2cpp-offline.hint.json");
     const auto hintPath = outputDir / "il2cpp-offline.hint.json";
     std::ofstream out(hintPath);
     if (!out)
@@ -106,6 +113,44 @@ bool WriteHintJson(const std::filesystem::path& outputDir,
     out << "    \"metadata_registration_rva\": \"0x" << metaRva << "\"\n";
     out << "  }\n";
     out << "}\n";
+    if (!out)
+    {
+        return false;
+    }
+    progress.Complete();
+    return true;
+}
+
+bool WriteMetadataFile(
+    const std::filesystem::path& metadataPath,
+    const std::vector<uint8_t>& metadataBytes)
+{
+    DumpSdkProgressScope progress(
+        "Write metadata file",
+        metadataBytes.size(),
+        "global-metadata.dat");
+    std::ofstream output(metadataPath, std::ios::binary | std::ios::trunc);
+    if (!output)
+    {
+        return false;
+    }
+
+    constexpr size_t WriteChunkSize = 1024u * 1024u;
+    size_t offset = 0;
+    while (offset < metadataBytes.size())
+    {
+        const size_t writeSize = (std::min)(WriteChunkSize, metadataBytes.size() - offset);
+        output.write(
+            reinterpret_cast<const char*>(metadataBytes.data() + offset),
+            static_cast<std::streamsize>(writeSize));
+        if (!output)
+        {
+            return false;
+        }
+        offset += writeSize;
+        progress.Update(offset);
+    }
+    progress.Complete();
     return true;
 }
 
@@ -137,7 +182,6 @@ bool DumpIl2CppOfflineCollect(
             "[Il2CppOffline] module snapshot failed: " + error);
         return false;
     }
-
     std::vector<uint8_t> metadataBytes;
     MetadataScanResult scan{};
     const auto metadataPath = outputDir / "global-metadata.dat";
@@ -156,11 +200,11 @@ bool DumpIl2CppOfflineCollect(
             scan.metaBase));
     std::error_code ec;
     std::filesystem::create_directories(outputDir, ec);
-    std::ofstream outFile(metadataPath, std::ios::binary);
-    if (outFile)
+    if (!WriteMetadataFile(metadataPath, metadataBytes))
     {
-        outFile.write(reinterpret_cast<const char*>(metadataBytes.data()),
-            static_cast<std::streamsize>(metadataBytes.size()));
+        error = "failed to write global-metadata.dat";
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
     }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=collect");
@@ -178,10 +222,15 @@ bool DumpIl2CppOfflineCollect(
         return false;
     }
 
-    WriteHintJson(outputDir,
-        moduleBase,
-        registration.codeRegistrationVa,
-        registration.metadataRegistrationVa);
+    if (!WriteHintJson(outputDir,
+            moduleBase,
+            registration.codeRegistrationVa,
+            registration.metadataRegistrationVa))
+    {
+        error = "failed to write il2cpp-offline.hint.json";
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
+    }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=global-string-xrefs");
     GlobalStringXrefReportResults xrefResults;

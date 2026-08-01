@@ -1,5 +1,7 @@
 #include "OfflineCollectorInternal.h"
 
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
+
 namespace er2
 {
 
@@ -16,10 +18,33 @@ void CollectStringLiteralsAndUsages(const CollectContext& context, CollectedData
 
     const auto literalEntries = usageMap.find(
         static_cast<uint32_t>(Il2CppMetadataUsage::StringLiteral));
+    auto usageCount = [&](Il2CppMetadataUsage kind)
+    {
+        const auto entries = usageMap.find(static_cast<uint32_t>(kind));
+        return entries == usageMap.end() ? size_t{ 0 } : entries->second.size();
+    };
+    const bool useLiteralFallback = literalEntries == usageMap.end()
+        || literalEntries->second.empty();
+    const size_t totalUsageEntries =
+        usageCount(Il2CppMetadataUsage::StringLiteral)
+        + usageCount(Il2CppMetadataUsage::TypeInfo)
+        + usageCount(Il2CppMetadataUsage::Il2CppType)
+        + usageCount(Il2CppMetadataUsage::MethodDef)
+        + usageCount(Il2CppMetadataUsage::FieldInfo)
+        + usageCount(Il2CppMetadataUsage::MethodRef)
+        + (useLiteralFallback ? context.metadata.StringLiterals().size() : 0);
+    DumpSdkProgressScope progress("Collect metadata usages", totalUsageEntries);
+    size_t processedEntries = 0;
+    auto advanceProgress = [&]()
+    {
+        progress.Update(++processedEntries);
+    };
+
     if (literalEntries != usageMap.end())
     {
         for (const auto& [destination, source] : literalEntries->second)
         {
+            advanceProgress();
             out.strings.push_back({
                 context.metadata.GetStringLiteralFromIndex(source),
                 slotAddress(destination)
@@ -58,6 +83,7 @@ void CollectStringLiteralsAndUsages(const CollectContext& context, CollectedData
         }
         for (const auto& [destination, source] : entries->second)
         {
+            advanceProgress();
             CollectedMetadata metadata{};
             metadata.address = slotAddress(destination);
             if (metadata.address == 0)
@@ -123,6 +149,7 @@ void CollectStringLiteralsAndUsages(const CollectContext& context, CollectedData
     {
         for (const auto& [destination, source] : methodRefs->second)
         {
+            advanceProgress();
             Il2CppMethodSpec spec{};
             std::string typeName;
             std::string methodName;
@@ -145,12 +172,14 @@ void CollectStringLiteralsAndUsages(const CollectContext& context, CollectedData
     {
         for (size_t i = 0; i < context.metadata.StringLiterals().size(); ++i)
         {
+            advanceProgress();
             out.strings.push_back({
                 context.metadata.GetStringLiteralFromIndex(static_cast<uint32_t>(i)),
                 0
             });
         }
     }
+    progress.Complete();
 }
 
 } // namespace er2

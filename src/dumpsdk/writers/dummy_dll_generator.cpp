@@ -1,5 +1,6 @@
 #include <er2/unity2/dumpsdk/writers/dummy_dll_generator.hpp>
 #include <er2/unity2/dumpsdk/dump_log.hpp>
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
 #include <er2/unity2/dumpsdk/writers/cli/UnityCliWriter.h>
 
 #include <filesystem>
@@ -9,6 +10,7 @@ namespace er2
 
 bool DummyDllGenerator::Generate(const std::string& outputDir, const CollectedData& data)
 {
+    DumpSdkProgressScope progress("Generate DummyDll", data.assemblies.size());
     const std::string dllDir = outputDir + "\\DummyDll";
     std::error_code ec;
     std::filesystem::create_directories(std::filesystem::path(dllDir), ec);
@@ -21,16 +23,20 @@ bool DummyDllGenerator::Generate(const std::string& outputDir, const CollectedDa
     DumpSdkLog(DumpSdkLogLevel::Info,
         "[DummyDll] Generate begin, assemblies=" + std::to_string(data.assemblies.size()));
 
+    size_t assemblyIndex = 0;
     for (const auto& asm_ : data.assemblies)
     {
         if (!WriteAssembly(dllDir, asm_))
         {
             DumpSdkLog(DumpSdkLogLevel::Error, "[DummyDll] WriteAssembly failed");
+            progress.Fail(asm_.name);
             return false;
         }
+        progress.Update(++assemblyIndex, asm_.name);
     }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[DummyDll] Generate ok");
+    progress.Complete();
     return true;
 }
 

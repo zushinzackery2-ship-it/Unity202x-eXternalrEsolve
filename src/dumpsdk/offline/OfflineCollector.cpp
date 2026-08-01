@@ -4,6 +4,7 @@
 
 #include <er2/os/win/local_memory_accessor.hpp>
 #include <er2/unity2/dumpsdk/dump_log.hpp>
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
 #include <er2/unity2/dumpsdk/offline/PeImageAccess.h>
 #include <er2/unity2/metadata.hpp>
 
@@ -126,6 +127,7 @@ bool Collect(
     const uintptr_t moduleBase = static_cast<uintptr_t>(pe.ImageBase());
     const uint32_t moduleSize = static_cast<uint32_t>(pe.Size());
 
+    DumpSdkProgressScope parseProgress("Parse metadata", 1);
     Metadata metadata;
     try
     {
@@ -136,6 +138,7 @@ bool Collect(
         error = std::string("metadata parse failed: ") + ex.what();
         return false;
     }
+    parseProgress.Complete();
 
     RegistrationSearchInput searchInput{};
     searchInput.methodCount = CountMethodsForSearch(metadata);
@@ -144,6 +147,7 @@ bool Collect(
     searchInput.metadataUsagesCount = metadata.MetadataUsagesCount();
     searchInput.version = metadata.Version();
 
+    DumpSdkProgressScope registrationProgress("Locate registrations", 1);
     RegistrationSearch search(pe, searchInput);
     RegistrationInitResult registration{};
     uintptr_t codeRegistration = 0;
@@ -172,16 +176,19 @@ bool Collect(
     {
         return false;
     }
+    registrationProgress.Complete();
     if (registrationOut != nullptr)
     {
         *registrationOut = registration;
     }
 
+    DumpSdkProgressScope runtimeProgress("Initialize runtime", 1);
     OfflineRuntimeContext runtime(pe, metadata, metaBase);
     if (!runtime.Init(registration, error))
     {
         return false;
     }
+    runtimeProgress.Complete();
     TypeNameResolver resolver(metadata, runtime);
     DefaultValueDecoder decoder(metadata, runtime, resolver);
     CustomAttributeReader attributes(metadata, runtime, resolver, decoder);
@@ -192,6 +199,8 @@ bool Collect(
     out.fromOffline = true;
 
     const std::vector<Il2CppTypeDefinition>& typeDefs = metadata.TypeDefs();
+    DumpSdkProgressScope typeProgress("Collect types", typeDefs.size());
+    size_t processedTypes = 0;
     for (size_t imageIndex = 0; imageIndex < metadata.ImageDefs().size(); ++imageIndex)
     {
         const Il2CppImageDefinition& imageDef = metadata.ImageDefs()[imageIndex];
@@ -207,8 +216,10 @@ bool Collect(
         const int64_t end = static_cast<int64_t>(imageDef.typeStart) + imageDef.typeCount;
         for (int64_t typeDefIndex = imageDef.typeStart; typeDefIndex < end; ++typeDefIndex)
         {
+            ++processedTypes;
             if (typeDefIndex < 0 || static_cast<size_t>(typeDefIndex) >= typeDefs.size())
             {
+                typeProgress.Update(processedTypes);
                 continue;
             }
             const Il2CppTypeDefinition& typeDef = typeDefs[static_cast<size_t>(typeDefIndex)];
@@ -241,9 +252,11 @@ bool Collect(
             CollectEvents(context, imageIndex, typeDef, type);
             CollectMethods(context, imageIndex, imageName, typeDef, type);
             assembly.types.push_back(std::move(type));
+            typeProgress.Update(processedTypes);
         }
         out.assemblies.push_back(std::move(assembly));
     }
+    typeProgress.Complete();
 
     CollectStringLiteralsAndUsages(context, out);
     if (out.assemblies.empty())

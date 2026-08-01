@@ -1,4 +1,5 @@
 #include <er2/unity2/dumpsdk/offline/SafeHostMemory.h>
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
 
 #include <Psapi.h>
 #include <algorithm>
@@ -138,8 +139,10 @@ bool HostMemoryTrySnapshotRange(
         return false;
     }
 
+    DumpSdkProgressScope progress("Snapshot runtime image", moduleSize);
     outImage.assign(moduleSize, 0);
 
+    constexpr size_t CopyChunkSize = 64u * 1024u;
     size_t offset = 0;
     while (offset < moduleSize)
     {
@@ -147,7 +150,8 @@ bool HostMemoryTrySnapshotRange(
         MEMORY_BASIC_INFORMATION info{};
         if (VirtualQuery(reinterpret_cast<const void*>(absAddr), &info, sizeof(info)) == 0)
         {
-            offset += 0x1000;
+            offset += (std::min)(size_t{ 0x1000 }, moduleSize - offset);
+            progress.Update(offset);
             continue;
         }
 
@@ -156,18 +160,30 @@ bool HostMemoryTrySnapshotRange(
         const size_t chunk = static_cast<size_t>((std::min)(regionEnd - absAddr, static_cast<uintptr_t>(moduleSize - offset)));
         if (chunk == 0)
         {
-            offset += 0x1000;
+            offset += (std::min)(size_t{ 0x1000 }, moduleSize - offset);
+            progress.Update(offset);
             continue;
         }
 
         if (info.State == MEM_COMMIT && (info.Protect & PAGE_GUARD) == 0 && RegionAllowsRead(info.Protect))
         {
-            SehCopy(absAddr, outImage.data() + offset, chunk);
+            size_t copied = 0;
+            while (copied < chunk)
+            {
+                const size_t copySize = (std::min)(CopyChunkSize, chunk - copied);
+                SehCopy(absAddr + copied, outImage.data() + offset + copied, copySize);
+                copied += copySize;
+                progress.Update(offset + copied);
+            }
         }
-
+        else
+        {
+            progress.Update(offset + chunk);
+        }
         offset += chunk;
     }
 
+    progress.Complete();
     return true;
 }
 

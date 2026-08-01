@@ -1,5 +1,7 @@
 #include "GlobalStringXrefDocumentWriter.h"
 
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
+
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -68,6 +70,8 @@ bool GlobalStringXrefDocumentWriter::Write(
     GlobalStringXrefResult& result,
     std::string& error)
 {
+    const std::string reportName = ReportName(outputPath);
+    DumpSdkProgressScope progress("Write xref report", outputIndices.size(), reportName);
     std::error_code filesystemError;
     if (outputPath.has_parent_path())
     {
@@ -82,7 +86,7 @@ bool GlobalStringXrefDocumentWriter::Write(
     std::ofstream output(outputPath, std::ios::binary | std::ios::trunc);
     if (!output)
     {
-        error = "failed to open " + ReportName(outputPath);
+        error = "failed to open " + reportName;
         return false;
     }
 
@@ -149,6 +153,7 @@ bool GlobalStringXrefDocumentWriter::Write(
             output << '\n';
         }
         output << "      ]\n    }";
+        progress.Update(outputIndex + 1);
     }
     if (!outputIndices.empty())
     {
@@ -158,9 +163,10 @@ bool GlobalStringXrefDocumentWriter::Write(
 
     if (!output)
     {
-        error = "failed to write " + ReportName(outputPath);
+        error = "failed to write " + reportName;
         return false;
     }
+    progress.Complete();
     return true;
 }
 

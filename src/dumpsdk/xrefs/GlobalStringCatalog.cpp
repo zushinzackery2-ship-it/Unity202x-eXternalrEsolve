@@ -3,6 +3,8 @@
 #include "GlobalStringDecoder.h"
 #include "XrefPeAccess.h"
 
+#include <er2/unity2/dumpsdk/dump_progress.hpp>
+
 #include <algorithm>
 
 namespace er2
@@ -13,6 +15,18 @@ std::vector<DetectedGlobalString> GlobalStringCatalog::Extract(
     const GlobalStringXrefOptions& options)
 {
     std::vector<DetectedGlobalString> result;
+    std::uint64_t totalBytes = 0;
+    for (const PeSectionHeader& section : image.Sections())
+    {
+        if (IsStringSection(section))
+        {
+            totalBytes += section.Span();
+        }
+    }
+    DumpSdkProgressScope progress("Catalog native strings", totalBytes);
+    std::uint64_t processedBytes = 0;
+    constexpr std::size_t ProgressChunkSize = 64u * 1024u;
+
     for (const PeSectionHeader& section : image.Sections())
     {
         if (!IsStringSection(section))
@@ -24,36 +38,54 @@ std::vector<DetectedGlobalString> GlobalStringCatalog::Extract(
         const std::uint8_t* bytes = XrefRvaToData(image, section.virtualAddress, sectionSize);
         if (bytes == nullptr)
         {
+            processedBytes += sectionSize;
+            progress.Update(processedBytes);
             continue;
         }
 
         std::size_t offset = 0;
+        std::size_t nextProgressOffset = ProgressChunkSize;
         while (offset < sectionSize)
         {
             if (offset > 0 && bytes[offset - 1] != 0)
             {
                 ++offset;
-                continue;
             }
-
-            DecodedGlobalString decoded;
-            if (!GlobalStringDecoder::TryDecode(bytes + offset, sectionSize - offset, options, decoded))
+            else
             {
-                ++offset;
-                continue;
+                DecodedGlobalString decoded;
+                if (!GlobalStringDecoder::TryDecode(
+                        bytes + offset,
+                        sectionSize - offset,
+                        options,
+                        decoded))
+                {
+                    ++offset;
+                }
+                else
+                {
+                    const std::uint32_t rva = section.virtualAddress
+                        + static_cast<std::uint32_t>(offset);
+                    result.push_back({
+                        static_cast<std::uintptr_t>(image.ImageBase()) + rva,
+                        rva,
+                        decoded.byteLength,
+                        XrefSectionName(section),
+                        decoded.encoding,
+                        decoded.value,
+                        {} });
+                    offset += decoded.byteLength;
+                }
             }
 
-            const std::uint32_t rva = section.virtualAddress + static_cast<std::uint32_t>(offset);
-            result.push_back({
-                static_cast<std::uintptr_t>(image.ImageBase()) + rva,
-                rva,
-                decoded.byteLength,
-                XrefSectionName(section),
-                decoded.encoding,
-                decoded.value,
-                {} });
-            offset += decoded.byteLength;
+            if (offset >= nextProgressOffset || offset == sectionSize)
+            {
+                progress.Update(processedBytes + offset);
+                nextProgressOffset = offset + ProgressChunkSize;
+            }
         }
+        processedBytes += sectionSize;
+        progress.Update(processedBytes);
     }
 
     std::sort(
@@ -63,6 +95,7 @@ std::vector<DetectedGlobalString> GlobalStringCatalog::Extract(
         {
             return left.address < right.address;
         });
+    progress.Complete();
     return result;
 }
 
