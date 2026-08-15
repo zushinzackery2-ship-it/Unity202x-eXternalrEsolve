@@ -3,6 +3,9 @@
 #include <er2/mem/memory_accessor.hpp>
 #include <er2/unity2/dumpsdk/collected_data.hpp>
 
+#include <er2/unity2/dumpsdk/offline/PeImage.h>
+#include <er2/unity2/dumpsdk/xrefs/GlobalStringXrefTypes.h>
+
 #include <Windows.h>
 #include <cstdint>
 #include <string>
@@ -13,6 +16,14 @@ namespace er2
 /// In-process offline collect entry used by DumpSdkRunInProcess.
 /// `mem` is used for metadata pointer scoring / region reads.
 /// Module image snapshot uses SEH host reads at moduleBase..moduleBase+moduleSize.
+bool DumpIl2CppOfflineCollect(
+    const IMemoryAccessor& mem,
+    const PeImage& moduleSnapshot,
+    const std::string& outDir,
+    CollectedData& data,
+    GlobalStringXrefAnalysis* xrefAnalysis,
+    std::string& error);
+
 bool DumpIl2CppOfflineCollect(
     const IMemoryAccessor& mem,
     std::uintptr_t moduleBase,

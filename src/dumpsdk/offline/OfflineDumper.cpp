@@ -4,6 +4,7 @@
 #include <er2/unity2/dumpsdk/dump_log.hpp>
 #include <er2/unity2/dumpsdk/dump_progress.hpp>
 #include <er2/unity2/dumpsdk/offline/OfflineCollector.h>
+#include "OfflineArtifactWriter.h"
 #include <er2/unity2/dumpsdk/offline/PeImage.h>
 #include <er2/unity2/dumpsdk/offline/RegistrationSearch.h>
 #include <er2/unity2/dumpsdk/xrefs/GlobalStringXrefExporter.h>
@@ -14,6 +15,7 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <utility>
 #include <vector>
 
 namespace er2
@@ -92,96 +94,32 @@ bool TryExtractMetadataFromModule(
     return true;
 }
 
-bool WriteHintJson(const std::filesystem::path& outputDir,
-    uintptr_t moduleBase,
-    uintptr_t codeRegistrationVa,
-    uintptr_t metadataRegistrationVa)
-{
-    DumpSdkProgressScope progress("Write offline hint", 1, "il2cpp-offline.hint.json");
-    const auto hintPath = outputDir / "il2cpp-offline.hint.json";
-    std::ofstream out(hintPath);
-    if (!out)
-    {
-        return false;
-    }
-    const uint64_t codeRva = codeRegistrationVa >= moduleBase ? codeRegistrationVa - moduleBase : 0;
-    const uint64_t metaRva = metadataRegistrationVa >= moduleBase ? metadataRegistrationVa - moduleBase : 0;
-    out << "{\n";
-    out << "  \"module\": {\n";
-    out << "    \"base_addr\": \"0x" << std::hex << moduleBase << "\",\n";
-    out << "    \"code_registration_rva\": \"0x" << codeRva << "\",\n";
-    out << "    \"metadata_registration_rva\": \"0x" << metaRva << "\"\n";
-    out << "  }\n";
-    out << "}\n";
-    if (!out)
-    {
-        return false;
-    }
-    progress.Complete();
-    return true;
-}
-
-bool WriteMetadataFile(
-    const std::filesystem::path& metadataPath,
-    const std::vector<uint8_t>& metadataBytes)
-{
-    DumpSdkProgressScope progress(
-        "Write metadata file",
-        metadataBytes.size(),
-        "global-metadata.dat");
-    std::ofstream output(metadataPath, std::ios::binary | std::ios::trunc);
-    if (!output)
-    {
-        return false;
-    }
-
-    constexpr size_t WriteChunkSize = 1024u * 1024u;
-    size_t offset = 0;
-    while (offset < metadataBytes.size())
-    {
-        const size_t writeSize = (std::min)(WriteChunkSize, metadataBytes.size() - offset);
-        output.write(
-            reinterpret_cast<const char*>(metadataBytes.data() + offset),
-            static_cast<std::streamsize>(writeSize));
-        if (!output)
-        {
-            return false;
-        }
-        offset += writeSize;
-        progress.Update(offset);
-    }
-    progress.Complete();
-    return true;
-}
-
 } // namespace
 
 bool DumpIl2CppOfflineCollect(
     const IMemoryAccessor& mem,
-    std::uintptr_t moduleBase,
-    std::uint32_t moduleSize,
+    const PeImage& pe,
     const std::string& outDir,
     CollectedData& data,
+    GlobalStringXrefAnalysis* xrefAnalysis,
     std::string& error)
 {
     data = {};
-    if (moduleBase == 0 || moduleSize == 0)
+    const std::uintptr_t moduleBase = static_cast<std::uintptr_t>(pe.ImageBase());
+    const std::size_t snapshotSize = pe.Size();
+    if (!pe.IsBound()
+        || !pe.IsMemoryLoaded()
+        || moduleBase == 0
+        || snapshotSize == 0
+        || snapshotSize > (std::numeric_limits<std::uint32_t>::max)())
     {
-        error = "moduleBase/moduleSize invalid";
+        error = "module snapshot invalid";
         return false;
     }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=begin");
 
     const std::filesystem::path outputDir(outDir);
-    PeImage pe;
-    DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=snapshot");
-    if (!pe.LoadFromModuleRange(moduleBase, moduleSize, error))
-    {
-        DumpSdkLog(DumpSdkLogLevel::Error,
-            "[Il2CppOffline] module snapshot failed: " + error);
-        return false;
-    }
     std::vector<uint8_t> metadataBytes;
     MetadataScanResult scan{};
     const auto metadataPath = outputDir / "global-metadata.dat";
@@ -200,7 +138,7 @@ bool DumpIl2CppOfflineCollect(
             scan.metaBase));
     std::error_code ec;
     std::filesystem::create_directories(outputDir, ec);
-    if (!WriteMetadataFile(metadataPath, metadataBytes))
+    if (!OfflineArtifactWriter::WriteMetadata(metadataPath, metadataBytes))
     {
         error = "failed to write global-metadata.dat";
         DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
@@ -222,7 +160,8 @@ bool DumpIl2CppOfflineCollect(
         return false;
     }
 
-    if (!WriteHintJson(outputDir,
+    if (!OfflineArtifactWriter::WriteHint(
+            outputDir,
             moduleBase,
             registration.codeRegistrationVa,
             registration.metadataRegistrationVa))
@@ -235,10 +174,11 @@ bool DumpIl2CppOfflineCollect(
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=global-string-xrefs");
     GlobalStringXrefReportResults xrefResults;
     std::string xrefError;
-    if (!GlobalStringXrefExporter::ExportReports(
+    GlobalStringXrefAnalysis analysis = GlobalStringXrefExporter::Analyze(pe, {});
+    if (!GlobalStringXrefExporter::WriteReports(
             pe,
+            analysis,
             outputDir,
-            {},
             xrefResults,
             xrefError))
     {
@@ -254,8 +194,44 @@ bool DumpIl2CppOfflineCollect(
         xrefResults.runtimeRdata.stringCount,
         xrefResults.runtimeRdata.referenceCount));
 
+    if (xrefAnalysis != nullptr)
+    {
+        *xrefAnalysis = std::move(analysis);
+    }
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=end");
     return true;
+}
+
+bool DumpIl2CppOfflineCollect(
+    const IMemoryAccessor& mem,
+    const std::uintptr_t moduleBase,
+    const std::uint32_t moduleSize,
+    const std::string& outDir,
+    CollectedData& data,
+    std::string& error)
+{
+    if (moduleBase == 0 || moduleSize == 0)
+    {
+        error = "moduleBase/moduleSize invalid";
+        return false;
+    }
+
+    PeImage snapshot;
+    DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=snapshot");
+    if (!snapshot.LoadFromModuleRange(moduleBase, moduleSize, error))
+    {
+        DumpSdkLog(
+            DumpSdkLogLevel::Error,
+            "[Il2CppOffline] module snapshot failed: " + error);
+        return false;
+    }
+    return DumpIl2CppOfflineCollect(
+        mem,
+        snapshot,
+        outDir,
+        data,
+        nullptr,
+        error);
 }
 
 bool DumpIl2CppOfflineCollectFromModule(

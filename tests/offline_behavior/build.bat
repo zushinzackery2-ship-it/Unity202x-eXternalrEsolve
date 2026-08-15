@@ -48,6 +48,7 @@ cl /nologo /std:c++20 /EHsc /W3 /I "..\..\include" /I "..\.." ^
  "..\..\src\dumpsdk\offline\CollectMethods.cpp" ^
  "..\..\src\dumpsdk\offline\CollectStrings.cpp" ^
  "..\..\src\dumpsdk\offline\OfflineCollector.cpp" ^
+ "..\..\src\dumpsdk\offline\OfflineArtifactWriter.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_writer.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_dump_cs.cpp" ^
  "..\..\src\dumpsdk\writers\sidecar_header.cpp" ^

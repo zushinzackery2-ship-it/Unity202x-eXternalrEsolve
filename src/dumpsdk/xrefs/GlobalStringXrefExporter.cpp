@@ -22,13 +22,6 @@ constexpr const char* GlobalReportName = "global-string-xrefs.json";
 constexpr const char* RuntimeRdataReportName = "runtime-rdata-string-xrefs.json";
 constexpr const char* RuntimeRdataSection = ".rdata";
 
-struct XrefAnalysis
-{
-    GlobalStringXrefOptions options;
-    std::vector<DetectedGlobalString> strings;
-    std::vector<std::size_t> referencedIndices;
-};
-
 bool HasReference(
     const DetectedGlobalString& detected,
     const GlobalStringReferenceCandidate& candidate)
@@ -51,11 +44,11 @@ GlobalStringXrefOptions NormalizeOptions(const GlobalStringXrefOptions& requeste
     return options;
 }
 
-XrefAnalysis AnalyzeSnapshot(
+GlobalStringXrefAnalysis AnalyzeSnapshot(
     const PeImage& image,
     const GlobalStringXrefOptions& requestedOptions)
 {
-    XrefAnalysis analysis;
+    GlobalStringXrefAnalysis analysis;
     analysis.options = NormalizeOptions(requestedOptions);
 
     const std::vector<DetectedGlobalString> catalog = GlobalStringCatalog::Extract(
@@ -156,7 +149,7 @@ XrefAnalysis AnalyzeSnapshot(
 }
 
 std::vector<std::size_t> FilterBySection(
-    const XrefAnalysis& analysis,
+    const GlobalStringXrefAnalysis& analysis,
     const char* sectionName)
 {
     std::vector<std::size_t> result;
@@ -173,15 +166,21 @@ std::vector<std::size_t> FilterBySection(
 
 } // namespace
 
-bool GlobalStringXrefExporter::ExportReports(
+GlobalStringXrefAnalysis GlobalStringXrefExporter::Analyze(
     const PeImage& image,
+    const GlobalStringXrefOptions& options)
+{
+    return AnalyzeSnapshot(image, options);
+}
+
+bool GlobalStringXrefExporter::WriteReports(
+    const PeImage& image,
+    const GlobalStringXrefAnalysis& analysis,
     const std::filesystem::path& outputDirectory,
-    const GlobalStringXrefOptions& options,
     GlobalStringXrefReportResults& results,
     std::string& error)
 {
     results = {};
-    XrefAnalysis analysis = AnalyzeSnapshot(image, options);
     if (!GlobalStringXrefDocumentWriter::Write(
             image,
             outputDirectory / GlobalReportName,
@@ -207,6 +206,17 @@ bool GlobalStringXrefExporter::ExportReports(
         RuntimeRdataSection,
         results.runtimeRdata,
         error);
+}
+
+bool GlobalStringXrefExporter::ExportReports(
+    const PeImage& image,
+    const std::filesystem::path& outputDirectory,
+    const GlobalStringXrefOptions& options,
+    GlobalStringXrefReportResults& results,
+    std::string& error)
+{
+    const GlobalStringXrefAnalysis analysis = Analyze(image, options);
+    return WriteReports(image, analysis, outputDirectory, results, error);
 }
 
 bool GlobalStringXrefExporter::ExportReportsFromModule(

@@ -62,4 +62,11 @@ struct GlobalStringXrefReportResults
     GlobalStringXrefResult runtimeRdata;
 };
 
+struct GlobalStringXrefAnalysis
+{
+    GlobalStringXrefOptions options;
+    std::vector<DetectedGlobalString> strings;
+    std::vector<std::size_t> referencedIndices;
+};
+
 } // namespace er2
