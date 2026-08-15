@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <string>
 #include <vector>
 
 namespace er2::OfflineArtifactWriter
@@ -16,5 +17,9 @@ bool WriteHint(
 bool WriteMetadata(
     const std::filesystem::path& metadataPath,
     const std::vector<std::uint8_t>& metadataBytes);
+
+bool RemoveLegacyXrefReports(
+    const std::filesystem::path& outputDirectory,
+    std::string& error);
 
 } // namespace er2::OfflineArtifactWriter

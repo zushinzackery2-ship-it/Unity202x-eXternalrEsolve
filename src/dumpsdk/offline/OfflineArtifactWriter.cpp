@@ -8,6 +8,25 @@
 
 namespace er2::OfflineArtifactWriter
 {
+namespace
+{
+
+bool RemoveReport(
+    const std::filesystem::path& path,
+    std::string& error)
+{
+    std::error_code filesystemError;
+    std::filesystem::remove(path, filesystemError);
+    if (!filesystemError)
+    {
+        return true;
+    }
+    error = "failed to remove legacy XRef report "
+        + path.string() + ": " + filesystemError.message();
+    return false;
+}
+
+} // namespace
 
 bool WriteHint(
     const std::filesystem::path& outputDirectory,
@@ -83,6 +102,16 @@ bool WriteMetadata(
     }
     progress.Complete();
     return true;
+}
+
+bool RemoveLegacyXrefReports(
+    const std::filesystem::path& outputDirectory,
+    std::string& error)
+{
+    return RemoveReport(outputDirectory / "global-string-xrefs.json", error)
+        && RemoveReport(
+            outputDirectory / "runtime-rdata-string-xrefs.json",
+            error);
 }
 
 } // namespace er2::OfflineArtifactWriter

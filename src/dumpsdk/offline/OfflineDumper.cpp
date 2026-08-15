@@ -138,6 +138,17 @@ bool DumpIl2CppOfflineCollect(
             scan.metaBase));
     std::error_code ec;
     std::filesystem::create_directories(outputDir, ec);
+    if (ec)
+    {
+        error = "failed to create offline output directory: " + ec.message();
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
+    }
+    if (!OfflineArtifactWriter::RemoveLegacyXrefReports(outputDir, error))
+    {
+        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
+        return false;
+    }
     if (!OfflineArtifactWriter::WriteMetadata(metadataPath, metadataBytes))
     {
         error = "failed to write global-metadata.dat";
@@ -172,27 +183,10 @@ bool DumpIl2CppOfflineCollect(
     }
 
     DumpSdkLog(DumpSdkLogLevel::Info, "[Il2CppOffline] stage=global-string-xrefs");
-    GlobalStringXrefReportResults xrefResults;
-    std::string xrefError;
     GlobalStringXrefAnalysis analysis = GlobalStringXrefExporter::Analyze(pe, {});
-    if (!GlobalStringXrefExporter::WriteReports(
-            pe,
-            analysis,
-            outputDir,
-            xrefResults,
-            xrefError))
-    {
-        error = "global string xref export failed: " + xrefError;
-        DumpSdkLog(DumpSdkLogLevel::Error, "[Il2CppOffline] " + error);
-        return false;
-    }
     DumpSdkLog(DumpSdkLogLevel::Info, std::format(
-        "[Il2CppOffline] global string xrefs globalStrings={} globalReferences={} "
-        "runtimeRdataStrings={} runtimeRdataReferences={}",
-        xrefResults.global.stringCount,
-        xrefResults.global.referenceCount,
-        xrefResults.runtimeRdata.stringCount,
-        xrefResults.runtimeRdata.referenceCount));
+        "[Il2CppOffline] global string xrefs retainedInDatabase={}",
+        analysis.referencedIndices.size()));
 
     if (xrefAnalysis != nullptr)
     {
