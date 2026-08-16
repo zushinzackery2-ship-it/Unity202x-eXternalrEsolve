@@ -7,13 +7,8 @@
 namespace
 {
 
-er2::CollectedData BuildData()
+er2::CollectedType BuildType()
 {
-    er2::CollectedData data;
-    er2::CollectedAssembly assembly;
-    assembly.name = "SmokeAssembly";
-    assembly.fileName = "SmokeAssembly.dll";
-
     er2::CollectedType type;
     type.name = "SmokeType";
     type.namespaceName = "Smoke.Namespace";
@@ -48,9 +43,27 @@ er2::CollectedData BuildData()
     right.typeName = "Int32";
     method.params.push_back(right);
     type.methods.push_back(method);
+    return type;
+}
 
-    assembly.types.push_back(type);
-    data.assemblies.push_back(assembly);
+er2::CollectedData BuildData()
+{
+    const er2::CollectedType type = BuildType();
+    er2::CollectedData data;
+    const char* names[] = {
+        "SmokeAssembly",
+        "Assembly-CSharp.dll",
+        "UnityEngine.CoreModule.dll",
+        "System.Core",
+    };
+    for (const char* name : names)
+    {
+        er2::CollectedAssembly assembly;
+        assembly.name = name;
+        assembly.fileName = name;
+        assembly.types.push_back(type);
+        data.assemblies.push_back(assembly);
+    }
     return data;
 }
 
@@ -76,11 +89,27 @@ int main()
         return 1;
     }
 
-    const std::filesystem::path output = "out/DummyDll/SmokeAssembly.dll";
-    if (!std::filesystem::is_regular_file(output) || !HasPortableExecutableHeader(output))
+    const char* expected[] = {
+        "SmokeAssembly.dll",
+        "Assembly-CSharp.dll",
+        "UnityEngine.CoreModule.dll",
+        "System.Core.dll",
+    };
+    for (const char* name : expected)
     {
-        std::cerr << "Generated assembly is missing or invalid\n";
-        return 2;
+        const std::filesystem::path output = std::filesystem::path("out/DummyDll") / name;
+        if (!std::filesystem::is_regular_file(output) || !HasPortableExecutableHeader(output))
+        {
+            std::cerr << "Generated assembly is missing or invalid: " << name << "\n";
+            return 2;
+        }
+    }
+
+    if (std::filesystem::exists("out/DummyDll/Assembly-CSharp.dll.dll")
+        || std::filesystem::exists("out/DummyDll/UnityEngine.CoreModule.dll.dll"))
+    {
+        std::cerr << "Generated assembly kept a duplicated .dll suffix\n";
+        return 3;
     }
 
     std::cout << "DummyDllSmoke passed\n";
